@@ -7,6 +7,7 @@ import 'package:live_activities/models/alert_config.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:pulse/features/focus/data/focus_live_activity_service.dart';
+import 'package:pulse/features/focus/data/focus_timer_sounds.dart';
 import 'package:pulse/features/focus/domain/entities/focus_session.dart';
 import 'package:pulse/features/focus/domain/focus_quotes.dart';
 import 'package:pulse/features/focus/domain/usecases/focus_usecases.dart';
@@ -299,6 +300,8 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         sessionQuote: quote,
       ),
     );
+    // Activate the audio session early so warning/completion chimes are heard.
+    await FocusTimerSounds.warmUp();
     await _liveActivity.start(
       quote: quote,
       remainingSeconds: remaining,
