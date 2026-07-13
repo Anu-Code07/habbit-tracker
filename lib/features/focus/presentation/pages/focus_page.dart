@@ -1,0 +1,328 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+import 'package:pulse/core/theme/pulse_colors.dart';
+import 'package:pulse/core/theme/pulse_radii.dart';
+import 'package:pulse/core/theme/pulse_spacing.dart';
+import 'package:pulse/core/theme/pulse_typography.dart';
+import 'package:pulse/core/widgets/pulse_glass.dart';
+import 'package:pulse/core/widgets/pulse_widgets.dart';
+import 'package:pulse/features/focus/presentation/bloc/focus_bloc.dart';
+
+class FocusPage extends StatelessWidget {
+  const FocusPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<FocusBloc, FocusState>(
+      builder: (context, state) {
+        if (state.isRunning || state.isCompleted || state.sessionStartedAt != null) {
+          return _ActiveFocusView(state: state);
+        }
+        return _FocusSetupView(state: state);
+      },
+    );
+  }
+}
+
+class _FocusSetupView extends StatelessWidget {
+  const _FocusSetupView({required this.state});
+  final FocusState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: PulseAtmosphere(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(PulseSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Focus', style: PulseTypography.displayMd()),
+              const SizedBox(height: PulseSpacing.sm),
+              Text(
+                'Today · ${state.todayMinutes} focused minutes',
+                style: PulseTypography.bodyMd(),
+              ),
+              const SizedBox(height: PulseSpacing.xxl),
+              PulseCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Mode', style: PulseTypography.bodySmStrong()),
+                    const SizedBox(height: PulseSpacing.md),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _ModeChip(
+                            label: 'Pomodoro',
+                            selected: state.mode == FocusMode.pomodoro,
+                            onTap: () => context.read<FocusBloc>().add(
+                                  const FocusModeChanged(FocusMode.pomodoro),
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: PulseSpacing.md),
+                        Expanded(
+                          child: _ModeChip(
+                            label: 'Free',
+                            selected: state.mode == FocusMode.free,
+                            onTap: () => context.read<FocusBloc>().add(
+                                  const FocusModeChanged(FocusMode.free),
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: PulseSpacing.xl),
+                    Text(
+                      _format(state.totalSeconds),
+                      style: PulseTypography.timerDisplay(),
+                    ),
+                    Text(
+                      state.mode == FocusMode.pomodoro
+                          ? 'Deep work block'
+                          : 'Up to 60 minutes',
+                      style: PulseTypography.bodySm(),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              PulsePrimaryButton(
+                label: 'Start focus',
+                onPressed: () => context
+                    .read<FocusBloc>()
+                    .add(const FocusTimerStarted()),
+              ),
+            ],
+          ),
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+class _ActiveFocusView extends StatelessWidget {
+  const _ActiveFocusView({required this.state});
+  final FocusState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFB8F28A),
+              PulseColors.primary,
+              Color(0xFF7ED957),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -60,
+              right: -40,
+              child: IgnorePointer(
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.25),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 100,
+              left: -50,
+              child: IgnorePointer(
+                child: Container(
+                  width: 180,
+                  height: 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: PulseColors.ink.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(PulseSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PulseGlass(
+                        tint: PulseColors.canvas,
+                        opacity: 0.45,
+                        blur: 12,
+                        borderRadius: BorderRadius.circular(PulseRadii.full),
+                        child: IconButton(
+                          onPressed: () => context
+                              .read<FocusBloc>()
+                              .add(const FocusTimerReset()),
+                          icon: const Icon(Icons.close_rounded, color: PulseColors.ink),
+                        ),
+                      ),
+                    ),
+              const Spacer(),
+              Text(
+                _format(
+                  state.isCompleted
+                      ? state.elapsedSeconds
+                      : state.remainingSeconds,
+                ),
+                style: PulseTypography.timerDisplay(color: PulseColors.ink),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: PulseSpacing.sm),
+              Text(
+                state.isCompleted ? 'Session complete' : 'Stay with it',
+                style: PulseTypography.bodyLg(color: PulseColors.inkDeep),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: PulseSpacing.xxl),
+              const _TipChip(
+                icon: Icons.music_note_rounded,
+                label: 'Calm music helps you settle in',
+              ),
+              const SizedBox(height: PulseSpacing.md),
+              const _TipChip(
+                icon: Icons.air_rounded,
+                label: 'Mindful breathing between blocks',
+              ),
+              const SizedBox(height: PulseSpacing.md),
+              const _TipChip(
+                icon: Icons.water_drop_outlined,
+                label: 'Water is important — keep a glass nearby',
+              ),
+              const Spacer(),
+              if (state.isCompleted)
+                PulseSecondaryButton(
+                  label: 'Done',
+                  onPressed: () =>
+                      context.read<FocusBloc>().add(const FocusTimerReset()),
+                )
+              else ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PulseColors.canvas,
+                      foregroundColor: PulseColors.ink,
+                    ),
+                    onPressed: () {
+                      final bloc = context.read<FocusBloc>();
+                      if (state.isRunning) {
+                        bloc.add(const FocusTimerPaused());
+                      } else {
+                        bloc.add(const FocusTimerResumed());
+                      }
+                    },
+                    child: Text(
+                      state.isRunning ? 'Pause' : 'Resume',
+                      style: PulseTypography.buttonMd(color: PulseColors.ink),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: PulseSpacing.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PulseColors.ink,
+                      foregroundColor: PulseColors.primary,
+                    ),
+                    onPressed: () => context
+                        .read<FocusBloc>()
+                        .add(const FocusTimerFinished()),
+                    child: Text(
+                      'Finish',
+                      style: PulseTypography.buttonMd(color: PulseColors.primary),
+                    ),
+                  ),
+                ),
+              ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PulseGlass(
+      tint: selected ? PulseColors.primary : PulseColors.canvas,
+      opacity: selected ? 0.8 : 0.45,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: PulseTypography.bodyMdStrong(),
+      ),
+    );
+  }
+}
+
+class _TipChip extends StatelessWidget {
+  const _TipChip({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return PulseGlass(
+      tint: PulseColors.canvas,
+      opacity: 0.35,
+      blur: 14,
+      padding: const EdgeInsets.symmetric(
+        horizontal: PulseSpacing.lg,
+        vertical: PulseSpacing.md,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: PulseColors.ink),
+          const SizedBox(width: PulseSpacing.md),
+          Expanded(
+            child: Text(label, style: PulseTypography.bodySmStrong()),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _format(int totalSeconds) {
+  final m = totalSeconds ~/ 60;
+  final s = totalSeconds % 60;
+  return '$m min ${s.toString().padLeft(2, '0')} s';
+}
