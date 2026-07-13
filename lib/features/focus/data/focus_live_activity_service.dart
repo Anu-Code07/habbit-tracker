@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:live_activities/live_activities.dart';
 import 'package:live_activities/models/alert_config.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -319,19 +319,48 @@ class FocusLiveActivityService {
   }
 }
 
-/// Short device sounds for focus countdown / completion.
+/// Pleasant Kenney UI chimes for focus countdown / completion.
 abstract final class FocusTimerSounds {
-  static Future<void> warningTick() async {
-    await SystemSound.play(SystemSoundType.click);
+  static final AudioPlayer _player = AudioPlayer();
+  static bool _configured = false;
+
+  static Future<void> _ensureConfigured() async {
+    if (_configured) return;
+    await AudioPlayer.global.setAudioContext(
+      AudioContext(
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {
+            AVAudioSessionOptions.mixWithOthers,
+          },
+        ),
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          stayAwake: false,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.notificationEvent,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+      ),
+    );
+    await _player.setReleaseMode(ReleaseMode.stop);
+    await _player.setVolume(1);
+    _configured = true;
   }
 
-  static Future<void> warningAlert() async {
-    await SystemSound.play(SystemSoundType.alert);
+  static Future<void> _play(String assetPath) async {
+    try {
+      await _ensureConfigured();
+      await _player.stop();
+      await _player.play(AssetSource(assetPath));
+    } catch (error, stack) {
+      debugPrint('FocusTimerSounds failed: $error\n$stack');
+    }
   }
 
-  static Future<void> completed() async {
-    await SystemSound.play(SystemSoundType.alert);
-    await Future<void>.delayed(const Duration(milliseconds: 180));
-    await SystemSound.play(SystemSoundType.alert);
-  }
+  static Future<void> warningTick() => _play('sounds/focus_tick.wav');
+
+  static Future<void> warningAlert() => _play('sounds/focus_warning.wav');
+
+  static Future<void> completed() => _play('sounds/focus_complete.wav');
 }

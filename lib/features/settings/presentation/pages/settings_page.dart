@@ -74,6 +74,57 @@ class SettingsPage extends StatelessWidget {
                                   .read<SettingsBloc>()
                                   .add(SettingsHapticsChanged(v)),
                         ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Completion sound',
+                            style: PulseTypography.bodyMdStrong(),
+                          ),
+                          subtitle: Text(
+                            'Chime when a focus session ends',
+                            style: PulseTypography.bodySm(),
+                          ),
+                          value: state.completionSoundEnabled,
+                          onChanged: state.busy
+                              ? null
+                              : (v) => context
+                                  .read<SettingsBloc>()
+                                  .add(SettingsCompletionSoundChanged(v)),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Warning sound',
+                            style: PulseTypography.bodyMdStrong(),
+                          ),
+                          subtitle: Text(
+                            'Alert when 10 seconds remain',
+                            style: PulseTypography.bodySm(),
+                          ),
+                          value: state.warningSoundEnabled,
+                          onChanged: state.busy
+                              ? null
+                              : (v) => context
+                                  .read<SettingsBloc>()
+                                  .add(SettingsWarningSoundChanged(v)),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Focus ticks',
+                            style: PulseTypography.bodyMdStrong(),
+                          ),
+                          subtitle: Text(
+                            'Soft pluck on each of the last 10 seconds',
+                            style: PulseTypography.bodySm(),
+                          ),
+                          value: state.focusTickSoundEnabled,
+                          onChanged: state.busy
+                              ? null
+                              : (v) => context
+                                  .read<SettingsBloc>()
+                                  .add(SettingsFocusTickSoundChanged(v)),
+                        ),
                       ],
                     ),
                   ),

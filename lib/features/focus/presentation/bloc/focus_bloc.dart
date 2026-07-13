@@ -335,16 +335,21 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     AlertConfig? islandAlert;
     if (next == 10 || (next < 10 && !_didWarnTenSeconds)) {
       _didWarnTenSeconds = true;
-      islandAlert = AlertConfig(
-        title: 'Almost done',
-        body: '10 seconds left',
-      );
-      await FocusTimerSounds.warningAlert();
+      if (_settings.warningSoundEnabled) {
+        islandAlert = AlertConfig(
+          title: 'Almost done',
+          body: '10 seconds left',
+          sound: 'default',
+        );
+        await FocusTimerSounds.warningAlert();
+      }
       if (_settings.hapticsEnabled) {
         await HapticFeedback.mediumImpact();
       }
     } else if (next < 10) {
-      await FocusTimerSounds.warningTick();
+      if (_settings.focusTickSoundEnabled) {
+        await FocusTimerSounds.warningTick();
+      }
       if (_settings.hapticsEnabled) {
         await HapticFeedback.selectionClick();
       }
@@ -364,15 +369,20 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
-    await FocusTimerSounds.completed();
+    if (_settings.completionSoundEnabled) {
+      await FocusTimerSounds.completed();
+    }
     if (_settings.hapticsEnabled) {
       await HapticFeedback.heavyImpact();
     }
     await _liveActivity.end(
-      completionAlert: AlertConfig(
-        title: 'Focus complete',
-        body: 'Nice work — session finished',
-      ),
+      completionAlert: _settings.completionSoundEnabled
+          ? AlertConfig(
+              title: 'Focus complete',
+              body: 'Nice work — session finished',
+              sound: 'default',
+            )
+          : null,
     );
     // Timer-based elapsed excludes paused time; clamp to planned length.
     final fromTimer =

@@ -23,6 +23,27 @@ class SettingsHapticsChanged extends SettingsEvent {
   List<Object?> get props => [enabled];
 }
 
+class SettingsCompletionSoundChanged extends SettingsEvent {
+  const SettingsCompletionSoundChanged(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
+class SettingsWarningSoundChanged extends SettingsEvent {
+  const SettingsWarningSoundChanged(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
+class SettingsFocusTickSoundChanged extends SettingsEvent {
+  const SettingsFocusTickSoundChanged(this.enabled);
+  final bool enabled;
+  @override
+  List<Object?> get props => [enabled];
+}
+
 class SettingsDataReset extends SettingsEvent {
   const SettingsDataReset();
 }
@@ -38,6 +59,9 @@ class SettingsBackupImportRequested extends SettingsEvent {
 class SettingsState extends Equatable {
   const SettingsState({
     this.hapticsEnabled = true,
+    this.completionSoundEnabled = true,
+    this.warningSoundEnabled = true,
+    this.focusTickSoundEnabled = true,
     this.workMinutes = 25,
     this.breakMinutes = 5,
     this.resetDone = false,
@@ -47,6 +71,9 @@ class SettingsState extends Equatable {
   });
 
   final bool hapticsEnabled;
+  final bool completionSoundEnabled;
+  final bool warningSoundEnabled;
+  final bool focusTickSoundEnabled;
   final int workMinutes;
   final int breakMinutes;
   final bool resetDone;
@@ -56,6 +83,9 @@ class SettingsState extends Equatable {
 
   SettingsState copyWith({
     bool? hapticsEnabled,
+    bool? completionSoundEnabled,
+    bool? warningSoundEnabled,
+    bool? focusTickSoundEnabled,
     int? workMinutes,
     int? breakMinutes,
     bool? resetDone,
@@ -66,6 +96,11 @@ class SettingsState extends Equatable {
   }) {
     return SettingsState(
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+      completionSoundEnabled:
+          completionSoundEnabled ?? this.completionSoundEnabled,
+      warningSoundEnabled: warningSoundEnabled ?? this.warningSoundEnabled,
+      focusTickSoundEnabled:
+          focusTickSoundEnabled ?? this.focusTickSoundEnabled,
       workMinutes: workMinutes ?? this.workMinutes,
       breakMinutes: breakMinutes ?? this.breakMinutes,
       resetDone: resetDone ?? this.resetDone,
@@ -78,6 +113,9 @@ class SettingsState extends Equatable {
   @override
   List<Object?> get props => [
         hapticsEnabled,
+        completionSoundEnabled,
+        warningSoundEnabled,
+        focusTickSoundEnabled,
         workMinutes,
         breakMinutes,
         resetDone,
@@ -102,6 +140,9 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       emit(
         SettingsState(
           hapticsEnabled: _settings.hapticsEnabled,
+          completionSoundEnabled: _settings.completionSoundEnabled,
+          warningSoundEnabled: _settings.warningSoundEnabled,
+          focusTickSoundEnabled: _settings.focusTickSoundEnabled,
           workMinutes: _settings.workMinutes,
           breakMinutes: _settings.breakMinutes,
         ),
@@ -110,6 +151,18 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<SettingsHapticsChanged>((e, emit) async {
       await _settings.setHapticsEnabled(e.enabled);
       emit(state.copyWith(hapticsEnabled: e.enabled));
+    });
+    on<SettingsCompletionSoundChanged>((e, emit) async {
+      await _settings.setCompletionSoundEnabled(e.enabled);
+      emit(state.copyWith(completionSoundEnabled: e.enabled));
+    });
+    on<SettingsWarningSoundChanged>((e, emit) async {
+      await _settings.setWarningSoundEnabled(e.enabled);
+      emit(state.copyWith(warningSoundEnabled: e.enabled));
+    });
+    on<SettingsFocusTickSoundChanged>((e, emit) async {
+      await _settings.setFocusTickSoundEnabled(e.enabled);
+      emit(state.copyWith(focusTickSoundEnabled: e.enabled));
     });
     on<SettingsDataReset>((_, emit) async {
       await _clearHabitData();
@@ -147,6 +200,9 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         emit(
           SettingsState(
             hapticsEnabled: _settings.hapticsEnabled,
+            completionSoundEnabled: _settings.completionSoundEnabled,
+            warningSoundEnabled: _settings.warningSoundEnabled,
+            focusTickSoundEnabled: _settings.focusTickSoundEnabled,
             workMinutes: _settings.workMinutes,
             breakMinutes: _settings.breakMinutes,
             importDone: true,

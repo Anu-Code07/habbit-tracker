@@ -7,6 +7,10 @@ class SettingsRepository {
 
   static const _onboardingKey = 'onboarding_complete';
   static const _hapticsKey = 'haptics_enabled';
+  static const _legacyTimerSoundsKey = 'timer_sounds_enabled';
+  static const _completionSoundKey = 'completion_sound_enabled';
+  static const _warningSoundKey = 'warning_sound_enabled';
+  static const _focusTickSoundKey = 'focus_tick_sound_enabled';
   static const _workMinutesKey = 'work_minutes';
   static const _breakMinutesKey = 'break_minutes';
   static const _userNameKey = 'user_name';
@@ -20,6 +24,28 @@ class SettingsRepository {
 
   Future<void> setHapticsEnabled(bool value) =>
       _prefs.setBool(_hapticsKey, value);
+
+  /// Falls back to the old combined timer-sounds flag when unset.
+  bool _soundFlag(String key) {
+    final value = _prefs.getBool(key);
+    if (value != null) return value;
+    return _prefs.getBool(_legacyTimerSoundsKey) ?? true;
+  }
+
+  bool get completionSoundEnabled => _soundFlag(_completionSoundKey);
+
+  Future<void> setCompletionSoundEnabled(bool value) =>
+      _prefs.setBool(_completionSoundKey, value);
+
+  bool get warningSoundEnabled => _soundFlag(_warningSoundKey);
+
+  Future<void> setWarningSoundEnabled(bool value) =>
+      _prefs.setBool(_warningSoundKey, value);
+
+  bool get focusTickSoundEnabled => _soundFlag(_focusTickSoundKey);
+
+  Future<void> setFocusTickSoundEnabled(bool value) =>
+      _prefs.setBool(_focusTickSoundKey, value);
 
   int get workMinutes => _prefs.getInt(_workMinutesKey) ?? 25;
 
@@ -44,6 +70,9 @@ class SettingsRepository {
   Map<String, dynamic> exportMap() => {
         'onboardingComplete': isOnboardingComplete,
         'hapticsEnabled': hapticsEnabled,
+        'completionSoundEnabled': completionSoundEnabled,
+        'warningSoundEnabled': warningSoundEnabled,
+        'focusTickSoundEnabled': focusTickSoundEnabled,
         'workMinutes': workMinutes,
         'breakMinutes': breakMinutes,
         'userName': userName,
@@ -57,6 +86,28 @@ class SettingsRepository {
     final haptics = map['hapticsEnabled'];
     if (haptics is bool) {
       await setHapticsEnabled(haptics);
+    }
+    final completionSound = map['completionSoundEnabled'];
+    if (completionSound is bool) {
+      await setCompletionSoundEnabled(completionSound);
+    }
+    final warningSound = map['warningSoundEnabled'];
+    if (warningSound is bool) {
+      await setWarningSoundEnabled(warningSound);
+    }
+    final tickSound = map['focusTickSoundEnabled'];
+    if (tickSound is bool) {
+      await setFocusTickSoundEnabled(tickSound);
+    }
+    // Older backups used a single timerSoundsEnabled flag.
+    final legacySounds = map['timerSoundsEnabled'];
+    if (legacySounds is bool &&
+        completionSound is! bool &&
+        warningSound is! bool &&
+        tickSound is! bool) {
+      await setCompletionSoundEnabled(legacySounds);
+      await setWarningSoundEnabled(legacySounds);
+      await setFocusTickSoundEnabled(legacySounds);
     }
     final work = map['workMinutes'];
     if (work is int) {
