@@ -89,6 +89,7 @@ class FocusLiveActivityService {
     required int remainingSeconds,
     required int totalSeconds,
     required bool isPaused,
+    DateTime? endsAt,
   }) {
     final safeRemaining = remainingSeconds.clamp(0, totalSeconds);
     final m = safeRemaining ~/ 60;
@@ -97,10 +98,11 @@ class FocusLiveActivityService {
         '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     final progress =
         totalSeconds == 0 ? 0.0 : 1 - (safeRemaining / totalSeconds);
+    // Prefer a stable wall-clock deadline so Live Activity and the app stay aligned.
     final endAt = isPaused
         ? 0
-        : DateTime.now()
-            .add(Duration(seconds: safeRemaining))
+        : (endsAt ??
+                DateTime.now().add(Duration(seconds: safeRemaining)))
             .millisecondsSinceEpoch;
 
     return <String, dynamic>{
@@ -152,6 +154,7 @@ class FocusLiveActivityService {
     required String quote,
     required int remainingSeconds,
     required int totalSeconds,
+    required DateTime endsAt,
   }) async {
     await init();
     if (!_initialized) return;
@@ -178,6 +181,7 @@ class FocusLiveActivityService {
       remainingSeconds: remainingSeconds,
       totalSeconds: totalSeconds,
       isPaused: false,
+      endsAt: endsAt,
     );
 
     try {
@@ -246,6 +250,7 @@ class FocusLiveActivityService {
     required int remainingSeconds,
     required int totalSeconds,
     required bool isPaused,
+    DateTime? endsAt,
     AlertConfig? alert,
   }) async {
     if (!_active) return;
@@ -255,6 +260,7 @@ class FocusLiveActivityService {
       remainingSeconds: remainingSeconds,
       totalSeconds: totalSeconds,
       isPaused: isPaused,
+      endsAt: endsAt,
     );
 
     try {
@@ -295,6 +301,7 @@ class FocusLiveActivityService {
               remainingSeconds: 0,
               totalSeconds: 1,
               isPaused: false,
+              endsAt: DateTime.now(),
             ),
             completionAlert,
           );

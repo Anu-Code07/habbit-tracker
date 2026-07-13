@@ -169,6 +169,10 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   StreamSubscription<FocusLiveAction>? _liveActionSub;
   bool _didWarnTenSeconds = false;
 
+  /// Shared wall-clock deadline for the in-app timer and Live Activity.
+  DateTime? _segmentEndsAt;
+  int _lastAnnouncedSecond = -1;
+
   void _onLiveAction(FocusLiveAction action) {
     switch (action) {
       case FocusLiveAction.pause:
@@ -184,6 +188,24 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
           add(const FocusTimerFinished());
         }
     }
+  }
+
+  int _remainingFromDeadline() {
+    final endsAt = _segmentEndsAt;
+    if (endsAt == null) return state.remainingSeconds;
+    final ms =
+        endsAt.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+    if (ms <= 0) return 0;
+    // Floor to whole seconds — matches Live Activity timerInterval display.
+    return ms ~/ 1000;
+  }
+
+  void _startTicker() {
+    _timer?.cancel();
+    // Sub-second polling keeps the UI aligned with the Live Activity clock.
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      add(const FocusTick());
+    });
   }
 
   Future<void> _onStarted(FocusStarted event, Emitter<FocusState> emit) async {
@@ -214,7 +236,9 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
 
   Future<void> _onMode(FocusModeChanged event, Emitter<FocusState> emit) async {
     _timer?.cancel();
+    _segmentEndsAt = null;
     _didWarnTenSeconds = false;
+    _lastAnnouncedSecond = -1;
     await _liveActivity.end();
     final seconds = event.mode == FocusMode.pomodoro
         ? _settings.workMinutes * 60
@@ -260,25 +284,28 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       HapticFeedback.mediumImpact();
     }
     _didWarnTenSeconds = false;
+    _lastAnnouncedSecond = -1;
     final quote = PulseFocusQuotes.next();
+    final remaining = state.remainingSeconds;
+    final endsAt = DateTime.now().add(Duration(seconds: remaining));
+    _segmentEndsAt = endsAt;
     emit(
       state.copyWith(
         isRunning: true,
         isCompleted: false,
         elapsedSeconds: 0,
+        remainingSeconds: remaining,
         sessionStartedAt: DateTime.now(),
         sessionQuote: quote,
       ),
     );
     await _liveActivity.start(
       quote: quote,
-      remainingSeconds: state.remainingSeconds,
+      remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
+      endsAt: endsAt,
     );
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      add(const FocusTick());
-    });
+    _startTicker();
   }
 
   Future<void> _onPause(
@@ -286,10 +313,12 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
-    emit(state.copyWith(isRunning: false));
+    final remaining = _remainingFromDeadline().clamp(0, state.totalSeconds);
+    _segmentEndsAt = null;
+    emit(state.copyWith(isRunning: false, remainingSeconds: remaining));
     await _liveActivity.update(
       quote: state.sessionQuote ?? 'Stay with it',
-      remainingSeconds: state.remainingSeconds,
+      remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: true,
     );
@@ -299,17 +328,19 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     FocusTimerResumed event,
     Emitter<FocusState> emit,
   ) async {
-    emit(state.copyWith(isRunning: true));
+    final remaining = state.remainingSeconds.clamp(0, state.totalSeconds);
+    final endsAt = DateTime.now().add(Duration(seconds: remaining));
+    _segmentEndsAt = endsAt;
+    _lastAnnouncedSecond = -1;
+    emit(state.copyWith(isRunning: true, remainingSeconds: remaining));
     await _liveActivity.update(
       quote: state.sessionQuote ?? 'Stay with it',
-      remainingSeconds: state.remainingSeconds,
+      remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: false,
+      endsAt: endsAt,
     );
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      add(const FocusTick());
-    });
+    _startTicker();
   }
 
   Future<void> _onReset(
@@ -317,7 +348,9 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
+    _segmentEndsAt = null;
     _didWarnTenSeconds = false;
+    _lastAnnouncedSecond = -1;
     await _liveActivity.end();
     emit(
       state.copyWith(
@@ -331,18 +364,35 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   }
 
   Future<void> _onTick(FocusTick event, Emitter<FocusState> emit) async {
-    if (!state.isRunning) return;
-    if (state.remainingSeconds <= 1) {
+    if (!state.isRunning || _segmentEndsAt == null) return;
+
+    final remaining = _remainingFromDeadline().clamp(0, state.totalSeconds);
+    if (remaining <= 0) {
       _timer?.cancel();
+      _segmentEndsAt = null;
       add(const FocusTimerFinished());
       return;
     }
-    final next = state.remainingSeconds - 1;
-    emit(state.copyWith(remainingSeconds: next));
 
+    if (remaining != state.remainingSeconds) {
+      emit(state.copyWith(remainingSeconds: remaining));
+    }
+
+    // Fire second-boundary cues once per displayed second.
+    if (remaining == _lastAnnouncedSecond) return;
+    _lastAnnouncedSecond = remaining;
+
+    // Don't await here — overlapping ticks would desync the UI clock.
+    unawaited(_announceSecond(remaining));
+  }
+
+  Future<void> _announceSecond(int remaining) async {
     AlertConfig? islandAlert;
-    if (next == 10 || (next < 10 && !_didWarnTenSeconds)) {
+    var shouldPushLiveActivity = false;
+
+    if (remaining == 10 || (remaining < 10 && !_didWarnTenSeconds)) {
       _didWarnTenSeconds = true;
+      shouldPushLiveActivity = true;
       if (_settings.warningSoundEnabled) {
         islandAlert = AlertConfig(
           title: 'Almost done',
@@ -354,7 +404,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       if (_settings.hapticsEnabled) {
         await HapticFeedback.mediumImpact();
       }
-    } else if (next < 10) {
+    } else if (remaining < 10) {
       if (_settings.focusTickSoundEnabled) {
         await FocusTimerSounds.warningTick();
       }
@@ -363,13 +413,18 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       }
     }
 
-    await _liveActivity.update(
-      quote: state.sessionQuote ?? 'Stay with it',
-      remainingSeconds: next,
-      totalSeconds: state.totalSeconds,
-      isPaused: false,
-      alert: islandAlert,
-    );
+    // Only refresh Live Activity when entering the warning window.
+    // Rewriting endAtMs every tick was the main source of desync.
+    if (shouldPushLiveActivity) {
+      await _liveActivity.update(
+        quote: state.sessionQuote ?? 'Stay with it',
+        remainingSeconds: remaining,
+        totalSeconds: state.totalSeconds,
+        isPaused: false,
+        endsAt: _segmentEndsAt,
+        alert: islandAlert,
+      );
+    }
   }
 
   Future<void> _onFinished(
@@ -377,6 +432,8 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
+    _segmentEndsAt = null;
+    _lastAnnouncedSecond = -1;
     if (_settings.completionSoundEnabled) {
       await FocusTimerSounds.completed();
     }
@@ -427,6 +484,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   @override
   Future<void> close() async {
     _timer?.cancel();
+    _segmentEndsAt = null;
     await _liveActionSub?.cancel();
     await _liveActivity.end();
     return super.close();
