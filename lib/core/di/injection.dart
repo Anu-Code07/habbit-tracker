@@ -40,6 +40,7 @@ Future<void> configureDependencies() async {
     ..registerLazySingleton(() => GetActiveHabits(sl()))
     ..registerLazySingleton(() => GetWeekHabitStats(sl()))
     ..registerLazySingleton(() => SeedStarterHabits(sl()))
+    ..registerLazySingleton(() => DedupeHabits(sl()))
     ..registerLazySingleton(() => ClearHabitData(sl()))
     ..registerLazySingleton(() => FocusLiveActivityService())
     ..registerLazySingleton(() => SaveFocusSession(sl()))

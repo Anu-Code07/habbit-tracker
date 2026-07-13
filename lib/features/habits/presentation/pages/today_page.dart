@@ -5,7 +5,6 @@ import 'package:intl/intl.dart';
 
 import 'package:pulse/core/theme/habit_palette.dart';
 import 'package:pulse/core/theme/pulse_colors.dart';
-import 'package:pulse/core/theme/pulse_greetings.dart';
 import 'package:pulse/core/theme/pulse_radii.dart';
 import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
@@ -39,22 +38,26 @@ class TodayPage extends StatelessWidget {
                   ),
                 TodayEmpty(
                   :final selectedDate,
+                  :final greeting,
                   :final isRefreshing,
                 ) =>
                   _TodayBody(
                     selectedDate: selectedDate,
                     habits: const [],
+                    greeting: greeting,
                     empty: true,
                     isRefreshing: isRefreshing,
                   ),
                 TodaySuccess(
                   :final habits,
                   :final selectedDate,
+                  :final greeting,
                   :final isRefreshing,
                 ) =>
                   _TodayBody(
                     selectedDate: selectedDate,
                     habits: habits,
+                    greeting: greeting,
                     empty: false,
                     isRefreshing: isRefreshing,
                   ),
@@ -71,12 +74,14 @@ class _TodayBody extends StatefulWidget {
   const _TodayBody({
     required this.selectedDate,
     required this.habits,
+    required this.greeting,
     required this.empty,
     this.isRefreshing = false,
   });
 
   final DateTime selectedDate;
   final List<HabitWithStatus> habits;
+  final String greeting;
   final bool empty;
   final bool isRefreshing;
 
@@ -87,7 +92,6 @@ class _TodayBody extends StatefulWidget {
 class _TodayBodyState extends State<_TodayBody> {
   bool _calendarExpanded = false;
   late DateTime _visibleMonth;
-  late String _greeting;
   bool _askedForName = false;
 
   @override
@@ -97,7 +101,6 @@ class _TodayBodyState extends State<_TodayBody> {
       widget.selectedDate.year,
       widget.selectedDate.month,
     );
-    _greeting = PulseGreetings.forUser(sl<SettingsRepository>().userName);
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAskName());
   }
 
@@ -119,14 +122,13 @@ class _TodayBodyState extends State<_TodayBody> {
     _askedForName = true;
     final name = await showDialog<String>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (ctx) => const _NameAskDialog(),
     );
     if (!mounted || name == null || name.trim().length < 2) return;
     await settings.setUserName(name);
-    setState(() {
-      _greeting = PulseGreetings.forUser(name);
-    });
+    if (!mounted) return;
+    context.read<TodayBloc>().add(const TodayGreetingRolled());
   }
 
   @override
@@ -160,7 +162,7 @@ class _TodayBodyState extends State<_TodayBody> {
               children: [
                 Expanded(
                   child: Text(
-                    _greeting,
+                    widget.greeting,
                     style: PulseTypography.displayMd(),
                   ),
                 ),
@@ -489,7 +491,7 @@ class _NameAskDialogState extends State<_NameAskDialog> {
           const SizedBox(height: PulseSpacing.lg),
           TextField(
             controller: _controller,
-            autofocus: true,
+            autofocus: false,
             textCapitalization: TextCapitalization.words,
             decoration: const InputDecoration(
               hintText: 'Type it like you mean it',

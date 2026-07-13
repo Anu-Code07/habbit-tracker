@@ -105,5 +105,8 @@ class HabitRepositoryImpl implements HabitRepository {
   Future<void> seedHabits(List<Habit> habits) => _local.seedHabits(habits);
 
   @override
+  Future<int> dedupeActiveHabitsByName() => _local.dedupeActiveHabitsByName();
+
+  @override
   Future<void> clearAll() => _local.clearAll();
 }

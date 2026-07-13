@@ -96,6 +96,14 @@ class SeedStarterHabits {
   Future<void> call(List<Habit> habits) => _repository.seedHabits(habits);
 }
 
+class DedupeHabits {
+  DedupeHabits(this._repository);
+
+  final HabitRepository _repository;
+
+  Future<int> call() => _repository.dedupeActiveHabitsByName();
+}
+
 class ClearHabitData {
   ClearHabitData(this._repository);
 

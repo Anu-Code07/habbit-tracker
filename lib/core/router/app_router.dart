@@ -96,6 +96,7 @@ class AppShell extends StatelessWidget {
             toggleHabitCheckIn: sl<ToggleHabitCheckIn>(),
             settingsRepository: sl<SettingsRepository>(),
             homeWidgetSync: sl<PulseHomeWidgetSync>(),
+            dedupeHabits: sl<DedupeHabits>(),
           )..add(const TodayStarted()),
         ),
         BlocProvider(
@@ -148,7 +149,11 @@ class AppShell extends StatelessWidget {
                 onSelect: (i) {
                   navigationShell.goBranch(i);
                   // IndexedStack keeps tabs alive — refresh stale screens.
-                  if (i == 1) {
+                  if (i == 0) {
+                    context
+                        .read<TodayBloc>()
+                        .add(const TodayGreetingRolled());
+                  } else if (i == 1) {
                     context.read<FocusBloc>().add(const FocusStarted());
                   } else if (i == 2) {
                     context

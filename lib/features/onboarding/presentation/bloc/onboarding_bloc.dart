@@ -1,6 +1,5 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:uuid/uuid.dart';
 
 import 'package:pulse/core/theme/habit_palette.dart';
 import 'package:pulse/features/habits/domain/entities/habit.dart';
@@ -85,8 +84,10 @@ class OnboardingState extends Equatable {
 class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
   OnboardingBloc({
     required SeedStarterHabits seedStarterHabits,
+    required DedupeHabits dedupeHabits,
     required SettingsRepository settingsRepository,
   })  : _seedStarterHabits = seedStarterHabits,
+        _dedupeHabits = dedupeHabits,
         _settingsRepository = settingsRepository,
         super(const OnboardingState()) {
     on<OnboardingPageChanged>((e, emit) {
@@ -100,8 +101,8 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
   }
 
   final SeedStarterHabits _seedStarterHabits;
+  final DedupeHabits _dedupeHabits;
   final SettingsRepository _settingsRepository;
-  final _uuid = const Uuid();
 
   static const starters =
       <String, ({String name, String description, int icon, int color})>{
@@ -151,16 +152,6 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
     OnboardingCompleted event,
     Emitter<OnboardingState> emit,
   ) async {
-    if (!state.hasValidName) {
-      emit(
-        state.copyWith(
-          pageIndex: 1,
-          errorMessage: 'Come on, even your plants have names. Drop one in.',
-        ),
-      );
-      return;
-    }
-
     emit(state.copyWith(isSubmitting: true, clearError: true));
     try {
       final now = DateTime.now();
@@ -174,7 +165,8 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
           _ => HabitPalette.icons[4].codePoint,
         };
         return Habit(
-          id: _uuid.v4(),
+          // Stable ids so re-running onboarding does not create duplicates.
+          id: 'starter_$key',
           name: starter.name,
           description: starter.description,
           iconCode: icon,
@@ -186,7 +178,11 @@ class OnboardingBloc extends Bloc<OnboardingEvent, OnboardingState> {
       }).toList();
 
       await _seedStarterHabits(habits);
-      await _settingsRepository.setUserName(state.userName);
+      await _dedupeHabits();
+      final name = state.userName.trim();
+      if (name.length >= 2) {
+        await _settingsRepository.setUserName(name);
+      }
       await _settingsRepository.setOnboardingComplete(true);
       emit(state.copyWith(isSubmitting: false, clearError: true));
     } catch (_) {

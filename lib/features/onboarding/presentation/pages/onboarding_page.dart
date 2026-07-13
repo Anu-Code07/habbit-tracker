@@ -22,6 +22,7 @@ class OnboardingPage extends StatelessWidget {
     return BlocProvider(
       create: (_) => OnboardingBloc(
         seedStarterHabits: sl<SeedStarterHabits>(),
+        dedupeHabits: sl<DedupeHabits>(),
         settingsRepository: sl<SettingsRepository>(),
       ),
       child: const _OnboardingView(),
@@ -49,17 +50,8 @@ class _OnboardingViewState extends State<_OnboardingView> {
   Widget build(BuildContext context) {
     return BlocConsumer<OnboardingBloc, OnboardingState>(
       listenWhen: (p, c) =>
-          (p.isSubmitting && !c.isSubmitting && c.errorMessage == null) ||
-          (c.errorMessage != null && c.pageIndex == 1 && p.pageIndex != 1),
+          p.isSubmitting && !c.isSubmitting && c.errorMessage == null,
       listener: (context, state) {
-        if (state.errorMessage != null && state.pageIndex == 1) {
-          _controller.animateToPage(
-            1,
-            duration: const Duration(milliseconds: 380),
-            curve: Curves.easeOutCubic,
-          );
-          return;
-        }
         context.go('/app/today');
       },
       builder: (context, state) {
@@ -83,12 +75,11 @@ class _OnboardingViewState extends State<_OnboardingView> {
                         if (state.pageIndex < 3)
                           TextButton(
                             onPressed: () {
-                              final bloc = context.read<OnboardingBloc>();
-                              // Skip marketing pages, but never skip the name.
-                              final target = bloc.state.hasValidName ? 3 : 1;
-                              bloc.add(OnboardingPageChanged(target));
+                              context
+                                  .read<OnboardingBloc>()
+                                  .add(const OnboardingPageChanged(3));
                               _controller.animateToPage(
-                                target,
+                                3,
                                 duration: const Duration(milliseconds: 420),
                                 curve: Curves.easeOutCubic,
                               );
@@ -118,25 +109,10 @@ class _OnboardingViewState extends State<_OnboardingView> {
                         ),
                         _NamePage(
                           state: state,
-                          onNext: () {
-                            if (!context.read<OnboardingBloc>().state.hasValidName) {
-                              context.read<OnboardingBloc>().add(
-                                    const OnboardingNameChanged(''),
-                                  );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'We need a name — even "Captain Chaos" works.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            _controller.nextPage(
-                              duration: const Duration(milliseconds: 380),
-                              curve: Curves.easeOutCubic,
-                            );
-                          },
+                          onNext: () => _controller.nextPage(
+                            duration: const Duration(milliseconds: 380),
+                            curve: Curves.easeOutCubic,
+                          ),
                         ),
                         _RitualPage(
                           onNext: () => _controller.nextPage(
@@ -324,7 +300,7 @@ class _NamePageState extends State<_NamePage> {
                   controller: _controller,
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.done,
-                  autofocus: true,
+                  autofocus: false,
                   style: PulseTypography.displayXs(),
                   decoration: const InputDecoration(
                     hintText: 'Your name, nickname, alter ego…',
@@ -334,13 +310,6 @@ class _NamePageState extends State<_NamePage> {
                       .add(OnboardingNameChanged(value)),
                   onSubmitted: (_) => widget.onNext(),
                 ),
-                if (widget.state.errorMessage != null) ...[
-                  const SizedBox(height: PulseSpacing.sm),
-                  Text(
-                    widget.state.errorMessage!,
-                    style: PulseTypography.bodySm(color: PulseColors.negative),
-                  ),
-                ],
                 const SizedBox(height: PulseSpacing.md),
                 Wrap(
                   spacing: 8,
@@ -373,8 +342,16 @@ class _NamePageState extends State<_NamePage> {
           PulsePrimaryButton(
             label: widget.state.hasValidName
                 ? 'That’s me — continue'
-                : 'I have a name, promise',
+                : 'Continue',
             onPressed: widget.onNext,
+          ),
+          const SizedBox(height: PulseSpacing.sm),
+          TextButton(
+            onPressed: widget.onNext,
+            child: Text(
+              'Skip for now',
+              style: PulseTypography.bodySmStrong(color: PulseColors.mute),
+            ),
           ),
         ],
       ),

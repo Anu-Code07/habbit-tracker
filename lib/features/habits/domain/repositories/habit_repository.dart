@@ -17,5 +17,6 @@ abstract class HabitRepository {
   Future<int> getCurrentStreak(String habitId);
   Future<WeekHabitStats> getWeekStats(DateTime weekStart);
   Future<void> seedHabits(List<Habit> habits);
+  Future<int> dedupeActiveHabitsByName();
   Future<void> clearAll();
 }

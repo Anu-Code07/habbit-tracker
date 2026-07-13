@@ -1,13 +1,27 @@
 import 'dart:math';
 
 abstract final class PulseGreetings {
+  static String? _last;
+
+  /// Short greetings (about one line). Avoids repeating the last one.
   static String forUser(String rawName) {
     final name = rawName.trim();
     final hour = DateTime.now().hour;
     final pool = name.isEmpty
         ? _anonymous(hour)
         : _named(hour, _firstName(name));
-    return pool[Random().nextInt(pool.length)];
+
+    if (pool.length == 1) {
+      _last = pool.first;
+      return pool.first;
+    }
+
+    String next;
+    do {
+      next = pool[Random().nextInt(pool.length)];
+    } while (next == _last);
+    _last = next;
+    return next;
   }
 
   static String _firstName(String name) {
@@ -21,54 +35,54 @@ abstract final class PulseGreetings {
     if (hour < 5) {
       return [
         'Still up, $name?',
-        'Night owl mode: $name',
-        'The world sleeps. You don’t, $name.',
+        'Night owl, $name',
+        'Quiet hours, $name',
       ];
     }
     if (hour < 12) {
       return [
-        'Morning, $name — the plot thickens',
+        'Morning, $name',
         'Rise and pulse, $name',
-        'Look who showed up — $name!',
-        'Coffee first, legends later, $name',
-        'Hey $name, today’s yours (no pressure… okay, a little)',
-        'Good morning, $name. Mischief managed?',
+        'Hey $name',
+        'Let’s go, $name',
+        'Fresh start, $name',
+        'Coffee first, $name',
       ];
     }
     if (hour < 17) {
       return [
-        'Afternoon, $name — still undefeated?',
-        'Back at it, $name?',
-        'Midday check-in, $name. Looking dangerous.',
-        'You again? Love that for you, $name',
-        'Keep the streak warm, $name',
-        'Hello $name. The habits missed you. Barely.',
+        'Hey $name',
+        'Back at it, $name',
+        'Afternoon, $name',
+        'Keep going, $name',
+        'You got this, $name',
+        'Midday pulse, $name',
       ];
     }
     if (hour < 21) {
       return [
-        'Evening, $name — soft landings only',
-        'Wind-down mode: $name',
-        'Nice work making it here, $name',
-        'Hey $name, clock’s fancy but you’re fancier',
+        'Evening, $name',
+        'Soft landings, $name',
+        'Nice work, $name',
+        'Wind down, $name',
+        'Hey $name',
       ];
     }
     return [
-      'Late night legend, $name',
-      'One more gentle win, $name?',
-      'Quiet hours, big vibes, $name',
-      'The moon says hi, $name. So do we.',
+      'Late legend, $name',
+      'One more, $name?',
+      'Quiet wins, $name',
+      'Night pulse, $name',
     ];
   }
 
   static List<String> _anonymous(int hour) {
     if (hour < 12) {
-      return ['Good morning, mysterious stranger', 'Hey early bird — name TBD'];
+      return ['Good morning', 'Hey early bird', 'Fresh start'];
     }
     if (hour < 17) {
-      return ['Good afternoon, you', 'Hey you — we should do names sometime'];
+      return ['Good afternoon', 'Hey you', 'Back at it'];
     }
-    return ['Good evening, night rider', 'Hey night owl — introductions later'];
+    return ['Good evening', 'Night rider', 'Soft landings'];
   }
 }
-

@@ -75,10 +75,8 @@ class _SplashPageState extends State<SplashPage>
 
   void _goNext() {
     if (!mounted) return;
-    // TEMP: always show onboarding for review — revert after feedback.
-    context.go('/onboarding');
-    // final done = sl<SettingsRepository>().isOnboardingComplete;
-    // context.go(done ? '/app/today' : '/onboarding');
+    final done = sl<SettingsRepository>().isOnboardingComplete;
+    context.go(done ? '/app/today' : '/onboarding');
   }
 
   @override

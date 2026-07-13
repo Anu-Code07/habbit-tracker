@@ -8,6 +8,10 @@ abstract final class HabitPalette {
     0xFFD6ECFF, // soft blue
     0xFFFFC091, // accent orange
     0xFFE8EBE6, // canvas soft
+    0xFFE8D9FF, // soft lavender
+    0xFFD5F5F0, // soft mint
+    0xFFFFE0D6, // soft coral
+    0xFFE4EDFF, // periwinkle
   ];
 
   static const List<IconData> icons = [
@@ -19,6 +23,13 @@ abstract final class HabitPalette {
     Icons.restaurant_rounded,
     Icons.work_outline_rounded,
     Icons.bolt_rounded,
+    Icons.music_note_rounded,
+    Icons.favorite_rounded,
+    Icons.directions_run_rounded,
+    Icons.local_cafe_rounded,
+    Icons.park_rounded,
+    Icons.brush_rounded,
+    Icons.pets_rounded,
   ];
 
   static Color of(int value) => Color(value);

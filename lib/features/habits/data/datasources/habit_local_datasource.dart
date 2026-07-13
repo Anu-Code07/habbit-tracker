@@ -122,6 +122,34 @@ class HabitLocalDataSource {
     });
   }
 
+  /// Keeps the oldest active habit per name; archives newer duplicates.
+  Future<int> dedupeActiveHabitsByName() async {
+    final habits = await getActiveHabits();
+    final keepByName = <String, Habit>{};
+    final toArchive = <String>[];
+
+    for (final habit in habits) {
+      final key = habit.name.trim().toLowerCase();
+      if (key.isEmpty) continue;
+      final existing = keepByName[key];
+      if (existing == null) {
+        keepByName[key] = habit;
+        continue;
+      }
+      if (habit.createdAt.isBefore(existing.createdAt)) {
+        toArchive.add(existing.id);
+        keepByName[key] = habit;
+      } else {
+        toArchive.add(habit.id);
+      }
+    }
+
+    for (final id in toArchive) {
+      await archiveHabit(id);
+    }
+    return toArchive.length;
+  }
+
   Future<void> clearAll() async {
     await _db.delete(_db.checkIns).go();
     await _db.delete(_db.habits).go();

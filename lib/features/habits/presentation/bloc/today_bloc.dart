@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import 'package:pulse/core/theme/pulse_greetings.dart';
 import 'package:pulse/core/widgets/pulse_home_widget_sync.dart';
 import 'package:pulse/features/habits/domain/entities/habit.dart';
 import 'package:pulse/features/habits/domain/usecases/habit_usecases.dart';
@@ -35,6 +36,10 @@ class TodayRefreshed extends TodayEvent {
   const TodayRefreshed();
 }
 
+class TodayGreetingRolled extends TodayEvent {
+  const TodayGreetingRolled();
+}
+
 sealed class TodayState extends Equatable {
   const TodayState();
   @override
@@ -53,11 +58,13 @@ class TodaySuccess extends TodayState {
   const TodaySuccess({
     required this.habits,
     required this.selectedDate,
+    required this.greeting,
     this.isRefreshing = false,
   });
 
   final List<HabitWithStatus> habits;
   final DateTime selectedDate;
+  final String greeting;
   final bool isRefreshing;
 
   double get completionRate {
@@ -69,40 +76,46 @@ class TodaySuccess extends TodayState {
   TodaySuccess copyWith({
     List<HabitWithStatus>? habits,
     DateTime? selectedDate,
+    String? greeting,
     bool? isRefreshing,
   }) {
     return TodaySuccess(
       habits: habits ?? this.habits,
       selectedDate: selectedDate ?? this.selectedDate,
+      greeting: greeting ?? this.greeting,
       isRefreshing: isRefreshing ?? this.isRefreshing,
     );
   }
 
   @override
-  List<Object?> get props => [habits, selectedDate, isRefreshing];
+  List<Object?> get props => [habits, selectedDate, greeting, isRefreshing];
 }
 
 class TodayEmpty extends TodayState {
   const TodayEmpty({
     required this.selectedDate,
+    required this.greeting,
     this.isRefreshing = false,
   });
 
   final DateTime selectedDate;
+  final String greeting;
   final bool isRefreshing;
 
   TodayEmpty copyWith({
     DateTime? selectedDate,
+    String? greeting,
     bool? isRefreshing,
   }) {
     return TodayEmpty(
       selectedDate: selectedDate ?? this.selectedDate,
+      greeting: greeting ?? this.greeting,
       isRefreshing: isRefreshing ?? this.isRefreshing,
     );
   }
 
   @override
-  List<Object?> get props => [selectedDate, isRefreshing];
+  List<Object?> get props => [selectedDate, greeting, isRefreshing];
 }
 
 class TodayError extends TodayState {
@@ -118,27 +131,48 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
     required ToggleHabitCheckIn toggleHabitCheckIn,
     required SettingsRepository settingsRepository,
     required PulseHomeWidgetSync homeWidgetSync,
+    required DedupeHabits dedupeHabits,
   })  : _getTodayHabits = getTodayHabits,
         _toggleHabitCheckIn = toggleHabitCheckIn,
         _settingsRepository = settingsRepository,
         _homeWidgetSync = homeWidgetSync,
+        _dedupeHabits = dedupeHabits,
         super(const TodayInitial()) {
     on<TodayStarted>(_onStarted);
     on<TodayRefreshed>(_onRefresh);
     on<TodayDateSelected>(_onDate);
     on<TodayHabitToggled>(_onToggle);
+    on<TodayGreetingRolled>(_onGreetingRolled);
   }
 
   final GetTodayHabits _getTodayHabits;
   final ToggleHabitCheckIn _toggleHabitCheckIn;
   final SettingsRepository _settingsRepository;
   final PulseHomeWidgetSync _homeWidgetSync;
+  final DedupeHabits _dedupeHabits;
 
   DateTime _selected = DateTime.now();
   int _loadGeneration = 0;
 
+  String _rollGreeting() =>
+      PulseGreetings.forUser(_settingsRepository.userName);
+
+  Future<void> _onGreetingRolled(
+    TodayGreetingRolled event,
+    Emitter<TodayState> emit,
+  ) async {
+    final greeting = _rollGreeting();
+    final current = state;
+    if (current is TodaySuccess) {
+      emit(current.copyWith(greeting: greeting));
+    } else if (current is TodayEmpty) {
+      emit(current.copyWith(greeting: greeting));
+    }
+  }
+
   Future<void> _onStarted(TodayStarted event, Emitter<TodayState> emit) async {
     emit(const TodayLoading());
+    await _dedupeHabits();
     await _fetchHabits(emit);
   }
 
@@ -181,10 +215,12 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
     try {
       final habits = await _getTodayHabits(date: _selected);
       if (generation != _loadGeneration) return;
+      final greeting = _rollGreeting();
       if (habits.isEmpty) {
         emit(
           TodayEmpty(
             selectedDate: _normalize(_selected),
+            greeting: greeting,
             isRefreshing: false,
           ),
         );
@@ -193,6 +229,7 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
           TodaySuccess(
             habits: habits,
             selectedDate: _normalize(_selected),
+            greeting: greeting,
             isRefreshing: false,
           ),
         );
@@ -231,12 +268,18 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
       await _toggleHabitCheckIn(habitId: event.habitId, date: _selected);
       final habits = await _getTodayHabits(date: _selected);
       if (habits.isEmpty) {
-        emit(TodayEmpty(selectedDate: _normalize(_selected)));
+        emit(
+          TodayEmpty(
+            selectedDate: _normalize(_selected),
+            greeting: current.greeting,
+          ),
+        );
       } else {
         emit(
           TodaySuccess(
             habits: habits,
             selectedDate: _normalize(_selected),
+            greeting: current.greeting,
           ),
         );
       }
