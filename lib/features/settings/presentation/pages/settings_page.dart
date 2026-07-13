@@ -253,6 +253,13 @@ class SettingsPage extends StatelessWidget {
                           'Pulse helps you keep small daily promises — habits you can actually finish, focus sessions that protect your attention, and a gentle weekly view of your rhythm. Everything stays on your device.',
                           style: PulseTypography.bodySm(),
                         ),
+                        const SizedBox(height: PulseSpacing.md),
+                        Text(
+                          'Made with ♥ by Anurag',
+                          style: PulseTypography.bodySm(
+                            color: PulseColors.body.withValues(alpha: 0.75),
+                          ),
+                        ),
                       ],
                     ),
                   ),
