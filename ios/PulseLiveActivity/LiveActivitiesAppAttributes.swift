@@ -5,7 +5,10 @@ import SwiftUI
 struct LiveActivitiesAppAttributes: ActivityAttributes, Identifiable {
   public typealias LiveDeliveryData = ContentState
 
-  public struct ContentState: Codable, Hashable {}
+  /// Must match the live_activities plugin ContentState shape.
+  public struct ContentState: Codable, Hashable {
+    var appGroupId: String
+  }
 
   var id = UUID()
 }

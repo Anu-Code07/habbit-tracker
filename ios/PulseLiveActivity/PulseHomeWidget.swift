@@ -1,7 +1,7 @@
 import WidgetKit
 import SwiftUI
 
-private let widgetGroupId = "group.com.pulse.pulse"
+private let widgetGroupId = "group.com.anurag.pulse"
 
 struct PulseHomeEntry: TimelineEntry {
   let date: Date

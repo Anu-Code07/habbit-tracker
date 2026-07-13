@@ -38,6 +38,9 @@ class _OnboardingView extends StatefulWidget {
 }
 
 class _OnboardingViewState extends State<_OnboardingView> {
+  static const _pageDuration = Duration(milliseconds: 420);
+  static const _pageCurve = Curves.easeInOutCubic;
+
   final _controller = PageController();
 
   @override
@@ -46,127 +49,191 @@ class _OnboardingViewState extends State<_OnboardingView> {
     super.dispose();
   }
 
+  void _goTo(int index) {
+    context.read<OnboardingBloc>().add(OnboardingPageChanged(index));
+    _controller.animateToPage(
+      index,
+      duration: _pageDuration,
+      curve: _pageCurve,
+    );
+  }
+
+  void _next() {
+    final next = (_controller.page?.round() ?? 0) + 1;
+    _controller.nextPage(duration: _pageDuration, curve: _pageCurve);
+    if (next <= 3) {
+      context.read<OnboardingBloc>().add(OnboardingPageChanged(next));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<OnboardingBloc, OnboardingState>(
+    return BlocListener<OnboardingBloc, OnboardingState>(
       listenWhen: (p, c) =>
           p.isSubmitting && !c.isSubmitting && c.errorMessage == null,
       listener: (context, state) {
         context.go('/app/today');
       },
-      builder: (context, state) {
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: PulseAtmosphere(
-            child: SafeArea(
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      PulseSpacing.xl,
-                      PulseSpacing.md,
-                      PulseSpacing.xl,
-                      0,
-                    ),
-                    child: Row(
-                      children: [
-                        Text('PULSE', style: PulseTypography.brandMark()),
-                        const Spacer(),
-                        if (state.pageIndex < 3)
-                          TextButton(
-                            onPressed: () {
-                              context
-                                  .read<OnboardingBloc>()
-                                  .add(const OnboardingPageChanged(3));
-                              _controller.animateToPage(
-                                3,
-                                duration: const Duration(milliseconds: 420),
-                                curve: Curves.easeOutCubic,
-                              );
-                            },
-                            child: Text(
-                              'Skip',
-                              style: PulseTypography.bodySmStrong(
-                                color: PulseColors.mute,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: PulseAtmosphere(
+          child: SafeArea(
+            child: Column(
+              children: [
+                _OnboardingTopBar(onSkip: () => _goTo(3)),
+                Expanded(
+                  child: PageView(
+                    controller: _controller,
+                    // Keep neighbors alive so layouts stay warm and skip rebuild jank.
+                    allowImplicitScrolling: true,
+                    onPageChanged: (i) => context
+                        .read<OnboardingBloc>()
+                        .add(OnboardingPageChanged(i)),
+                    children: [
+                      _HeroIntro(onNext: _next),
+                      _NamePage(onNext: _next),
+                      _RitualPage(onNext: _next),
+                      const _PickHabitsPage(),
+                    ],
                   ),
-                  Expanded(
-                    child: PageView(
-                      controller: _controller,
-                      onPageChanged: (i) => context
-                          .read<OnboardingBloc>()
-                          .add(OnboardingPageChanged(i)),
-                      children: [
-                        _HeroIntro(
-                          onNext: () => _controller.nextPage(
-                            duration: const Duration(milliseconds: 380),
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                        _NamePage(
-                          state: state,
-                          onNext: () => _controller.nextPage(
-                            duration: const Duration(milliseconds: 380),
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                        _RitualPage(
-                          onNext: () => _controller.nextPage(
-                            duration: const Duration(milliseconds: 380),
-                            curve: Curves.easeOutCubic,
-                          ),
-                        ),
-                        _PickHabitsPage(state: state),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      PulseSpacing.xl,
-                      0,
-                      PulseSpacing.xl,
-                      PulseSpacing.xl,
-                    ),
-                    child: PulseGlass(
-                      opacity: 0.4,
-                      blur: 14,
-                      borderRadius: BorderRadius.circular(PulseRadii.pill),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: List.generate(4, (i) {
-                          final active = state.pageIndex == i;
-                          return AnimatedContainer(
-                            duration: const Duration(milliseconds: 240),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: active ? 28 : 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: active
-                                  ? PulseColors.ink
-                                  : PulseColors.mute.withValues(alpha: 0.35),
-                              borderRadius:
-                                  BorderRadius.circular(PulseRadii.pill),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const _OnboardingDots(),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+}
+
+/// Fixed-height chrome so Skip appearing/disappearing never shifts the page.
+class _OnboardingTopBar extends StatelessWidget {
+  const _OnboardingTopBar({required this.onSkip});
+
+  final VoidCallback onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        PulseSpacing.xl,
+        PulseSpacing.md,
+        PulseSpacing.xl,
+        0,
+      ),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            Text('PULSE', style: PulseTypography.brandMark()),
+            const Spacer(),
+            BlocSelector<OnboardingBloc, OnboardingState, bool>(
+              selector: (s) => s.pageIndex < 3,
+              builder: (context, showSkip) {
+                return AnimatedOpacity(
+                  duration: const Duration(milliseconds: 220),
+                  opacity: showSkip ? 1 : 0,
+                  child: IgnorePointer(
+                    ignoring: !showSkip,
+                    child: TextButton(
+                      onPressed: onSkip,
+                      child: Text(
+                        'Skip',
+                        style: PulseTypography.bodySmStrong(
+                          color: PulseColors.mute,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OnboardingDots extends StatelessWidget {
+  const _OnboardingDots();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        PulseSpacing.xl,
+        0,
+        PulseSpacing.xl,
+        PulseSpacing.xl,
+      ),
+      child: PulseGlass(
+        opacity: 0.4,
+        blur: 14,
+        borderRadius: BorderRadius.circular(PulseRadii.pill),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: BlocSelector<OnboardingBloc, OnboardingState, int>(
+          selector: (s) => s.pageIndex,
+          builder: (context, pageIndex) {
+            return SizedBox(
+              // Fixed width so expanding active pill doesn't nudge the chrome.
+              width: 4 * 8 + 3 * 28 + 8 * 8,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(4, (i) {
+                  final active = pageIndex == i;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: active ? 28 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? PulseColors.ink
+                          : PulseColors.mute.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(PulseRadii.pill),
+                    ),
+                  );
+                }),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Shared title block so step pages share the same vertical rhythm.
+class _StepHeader extends StatelessWidget {
+  const _StepHeader({
+    required this.title,
+    required this.subtitle,
+    this.trailing,
+  });
+
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(title, style: PulseTypography.displayMd()),
+        const SizedBox(height: PulseSpacing.sm),
+        Text(subtitle, style: PulseTypography.bodyMd()),
+        const SizedBox(height: PulseSpacing.md),
+        // Always reserve chip row height so pages don't jump when swiping.
+        SizedBox(
+          height: 32,
+          child: trailing ?? const SizedBox.shrink(),
+        ),
+        const SizedBox(height: PulseSpacing.lg),
+      ],
     );
   }
 }
@@ -245,11 +312,9 @@ class _HeroIntro extends StatelessWidget {
   }
 }
 
-
 class _NamePage extends StatefulWidget {
-  const _NamePage({required this.state, required this.onNext});
+  const _NamePage({required this.onNext});
 
-  final OnboardingState state;
   final VoidCallback onNext;
 
   @override
@@ -262,7 +327,9 @@ class _NamePageState extends State<_NamePage> {
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.state.userName);
+    _controller = TextEditingController(
+      text: context.read<OnboardingBloc>().state.userName,
+    );
   }
 
   @override
@@ -339,11 +406,14 @@ class _NamePageState extends State<_NamePage> {
             ),
           ),
           const Spacer(),
-          PulsePrimaryButton(
-            label: widget.state.hasValidName
-                ? 'That’s me — continue'
-                : 'Continue',
-            onPressed: widget.onNext,
+          BlocSelector<OnboardingBloc, OnboardingState, bool>(
+            selector: (s) => s.hasValidName,
+            builder: (context, hasValidName) {
+              return PulsePrimaryButton(
+                label: hasValidName ? 'That’s me — continue' : 'Continue',
+                onPressed: widget.onNext,
+              );
+            },
           ),
           const SizedBox(height: PulseSpacing.sm),
           TextButton(
@@ -363,98 +433,82 @@ class _RitualPage extends StatelessWidget {
   const _RitualPage({required this.onNext});
   final VoidCallback onNext;
 
+  static const _rituals = [
+    (
+      icon: Icons.check_circle_outline_rounded,
+      title: 'Tap to complete',
+      body: 'Colorful habit cards that feel good to finish.',
+      tint: Color(0xFFFFF1C2),
+    ),
+    (
+      icon: Icons.timer_outlined,
+      title: 'Focus when it counts',
+      body: 'Drop into a lime focus room and protect your attention.',
+      tint: Color(0xFFE2F6D5),
+    ),
+    (
+      icon: Icons.auto_graph_rounded,
+      title: 'See your rhythm',
+      body: 'Weekly insights that celebrate consistency, not perfection.',
+      tint: Color(0xFFD6ECFF),
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    const rituals = [
-      (
-        icon: Icons.check_circle_outline_rounded,
-        title: 'Tap to complete',
-        body: 'Colorful habit cards that feel good to finish.',
-        tint: Color(0xFFFFF1C2),
-      ),
-      (
-        icon: Icons.timer_outlined,
-        title: 'Focus when it counts',
-        body: 'Drop into a lime focus room and protect your attention.',
-        tint: Color(0xFFE2F6D5),
-      ),
-      (
-        icon: Icons.auto_graph_rounded,
-        title: 'See your rhythm',
-        body: 'Weekly insights that celebrate consistency, not perfection.',
-        tint: Color(0xFFD6ECFF),
-      ),
-    ];
-
     return Padding(
       padding: const EdgeInsets.all(PulseSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: PulseSpacing.lg),
-          Text('Three quiet powers', style: PulseTypography.displayMd()),
-          const SizedBox(height: PulseSpacing.sm),
-          Text(
-            'Pulse keeps the ritual simple so showing up stays easy.',
-            style: PulseTypography.bodyMd(),
+          const _StepHeader(
+            title: 'Three quiet powers',
+            subtitle: 'Pulse keeps the ritual simple so showing up stays easy.',
           ),
-          const SizedBox(height: PulseSpacing.xl),
           Expanded(
             child: ListView.separated(
-              itemCount: rituals.length,
+              physics: const BouncingScrollPhysics(),
+              itemCount: _rituals.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: PulseSpacing.md),
               itemBuilder: (context, index) {
-                final item = rituals[index];
-                return TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0, end: 1),
-                  duration: Duration(milliseconds: 420 + index * 120),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, child) {
-                    return Opacity(
-                      opacity: value,
-                      child: Transform.translate(
-                        offset: Offset(0, 18 * (1 - value)),
-                        child: child,
+                final item = _rituals[index];
+                return PulseGlass(
+                  tint: item.tint,
+                  opacity: 0.55,
+                  padding: const EdgeInsets.all(PulseSpacing.lg),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: PulseColors.canvas.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(PulseRadii.lg),
+                        ),
+                        child: Icon(item.icon, color: PulseColors.ink),
                       ),
-                    );
-                  },
-                  child: PulseGlass(
-                    tint: item.tint,
-                    opacity: 0.55,
-                    padding: const EdgeInsets.all(PulseSpacing.lg),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: PulseColors.canvas.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(PulseRadii.lg),
-                          ),
-                          child: Icon(item.icon, color: PulseColors.ink),
+                      const SizedBox(width: PulseSpacing.lg),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: PulseTypography.bodyMdStrong(),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(item.body, style: PulseTypography.bodySm()),
+                          ],
                         ),
-                        const SizedBox(width: PulseSpacing.lg),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.title,
-                                style: PulseTypography.bodyMdStrong(),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(item.body, style: PulseTypography.bodySm()),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
           ),
+          const SizedBox(height: PulseSpacing.md),
           PulsePrimaryButton(label: 'Continue', onPressed: onNext),
         ],
       ),
@@ -463,8 +517,7 @@ class _RitualPage extends StatelessWidget {
 }
 
 class _PickHabitsPage extends StatelessWidget {
-  const _PickHabitsPage({required this.state});
-  final OnboardingState state;
+  const _PickHabitsPage();
 
   @override
   Widget build(BuildContext context) {
@@ -473,123 +526,154 @@ class _PickHabitsPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('What will you practice?', style: PulseTypography.displayMd()),
-          const SizedBox(height: PulseSpacing.sm),
-          Text(
-            'Pick a few starters. You can reshape them anytime.',
-            style: PulseTypography.bodyMd(),
-          ),
-          const SizedBox(height: PulseSpacing.md),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: PulseGlass(
-              tint: PulseColors.primaryPale,
-              opacity: 0.7,
-              blur: 10,
-              borderRadius: BorderRadius.circular(PulseRadii.pill),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text(
-                '${state.selectedKeys.length} selected',
-                style: PulseTypography.bodySmStrong(
-                  color: PulseColors.positiveDeep,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: PulseSpacing.lg),
-          Expanded(
-            child: ListView(
-              children: OnboardingBloc.starters.entries.map((e) {
-                final selected = state.selectedKeys.contains(e.key);
-                final color = Color(e.value.color);
-                final icon = switch (e.key) {
-                  'read' => HabitPalette.icons[0],
-                  'workout' => HabitPalette.icons[1],
-                  'meditate' => HabitPalette.icons[2],
-                  'water' => HabitPalette.icons[3],
-                  _ => HabitPalette.icons[4],
-                };
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: PulseSpacing.md),
+          BlocSelector<OnboardingBloc, OnboardingState, int>(
+            selector: (s) => s.selectedKeys.length,
+            builder: (context, count) {
+              return _StepHeader(
+                title: 'What will you practice?',
+                subtitle: 'Pick a few starters. You can reshape them anytime.',
+                trailing: Align(
+                  alignment: Alignment.centerLeft,
                   child: PulseGlass(
-                    tint: color,
-                    opacity: selected ? 0.72 : 0.42,
-                    borderOpacity: selected ? 0.85 : 0.4,
-                    onTap: () => context
-                        .read<OnboardingBloc>()
-                        .add(OnboardingToggleStarter(e.key)),
-                    padding: const EdgeInsets.all(PulseSpacing.lg),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: PulseColors.canvas.withValues(alpha: 0.55),
-                            borderRadius: BorderRadius.circular(PulseRadii.md),
-                          ),
-                          child: Icon(icon, color: PulseColors.ink),
-                        ),
-                        const SizedBox(width: PulseSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                e.value.name,
-                                style: PulseTypography.bodyMdStrong(),
-                              ),
-                              Text(
-                                e.value.description,
-                                style: PulseTypography.bodySm(),
-                              ),
-                            ],
-                          ),
-                        ),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: selected
-                                ? PulseColors.ink
-                                : Colors.transparent,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: PulseColors.ink, width: 2),
-                          ),
-                          child: selected
-                              ? const Icon(
-                                  Icons.check,
-                                  size: 16,
-                                  color: PulseColors.primary,
-                                )
-                              : null,
-                        ),
-                      ],
+                    tint: PulseColors.primaryPale,
+                    opacity: 0.7,
+                    blur: 10,
+                    borderRadius: BorderRadius.circular(PulseRadii.pill),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      '$count selected',
+                      style: PulseTypography.bodySmStrong(
+                        color: PulseColors.positiveDeep,
+                      ),
                     ),
                   ),
+                ),
+              );
+            },
+          ),
+          Expanded(
+            child: BlocBuilder<OnboardingBloc, OnboardingState>(
+              buildWhen: (p, c) => p.selectedKeys != c.selectedKeys,
+              builder: (context, state) {
+                return ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: OnboardingBloc.starters.entries.map((e) {
+                    final selected = state.selectedKeys.contains(e.key);
+                    final color = Color(e.value.color);
+                    final icon = switch (e.key) {
+                      'read' => HabitPalette.icons[0],
+                      'workout' => HabitPalette.icons[1],
+                      'meditate' => HabitPalette.icons[2],
+                      'water' => HabitPalette.icons[3],
+                      _ => HabitPalette.icons[4],
+                    };
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: PulseSpacing.md),
+                      child: PulseGlass(
+                        tint: color,
+                        opacity: selected ? 0.72 : 0.42,
+                        borderOpacity: selected ? 0.85 : 0.4,
+                        onTap: () => context
+                            .read<OnboardingBloc>()
+                            .add(OnboardingToggleStarter(e.key)),
+                        padding: const EdgeInsets.all(PulseSpacing.lg),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color:
+                                    PulseColors.canvas.withValues(alpha: 0.55),
+                                borderRadius:
+                                    BorderRadius.circular(PulseRadii.md),
+                              ),
+                              child: Icon(icon, color: PulseColors.ink),
+                            ),
+                            const SizedBox(width: PulseSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    e.value.name,
+                                    style: PulseTypography.bodyMdStrong(),
+                                  ),
+                                  Text(
+                                    e.value.description,
+                                    style: PulseTypography.bodySm(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? PulseColors.ink
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: PulseColors.ink,
+                                  width: 2,
+                                ),
+                              ),
+                              child: selected
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 16,
+                                      color: PulseColors.primary,
+                                    )
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
                 );
-              }).toList(),
+              },
             ),
           ),
-          if (state.errorMessage != null) ...[
-            Text(
-              state.errorMessage!,
-              style: PulseTypography.bodySm(color: PulseColors.negative),
-            ),
-            const SizedBox(height: PulseSpacing.sm),
-          ],
-          PulsePrimaryButton(
-            label: state.isSubmitting
-                ? 'Setting up…'
-                : state.userName.trim().isEmpty
-                    ? 'Start my Pulse'
-                    : 'Let’s go, ${state.userName.trim().split(RegExp(r'\s+')).first}',
-            onPressed: state.isSubmitting || state.selectedKeys.isEmpty
-                ? null
-                : () => context
-                    .read<OnboardingBloc>()
-                    .add(const OnboardingCompleted()),
+          BlocBuilder<OnboardingBloc, OnboardingState>(
+            buildWhen: (p, c) =>
+                p.isSubmitting != c.isSubmitting ||
+                p.errorMessage != c.errorMessage ||
+                p.userName != c.userName ||
+                p.selectedKeys != c.selectedKeys,
+            builder: (context, state) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (state.errorMessage != null) ...[
+                    Text(
+                      state.errorMessage!,
+                      style:
+                          PulseTypography.bodySm(color: PulseColors.negative),
+                    ),
+                    const SizedBox(height: PulseSpacing.sm),
+                  ],
+                  PulsePrimaryButton(
+                    label: state.isSubmitting
+                        ? 'Setting up…'
+                        : state.userName.trim().isEmpty
+                            ? 'Start my Pulse'
+                            : 'Let’s go, ${state.userName.trim().split(RegExp(r'\s+')).first}',
+                    onPressed: state.isSubmitting || state.selectedKeys.isEmpty
+                        ? null
+                        : () => context
+                            .read<OnboardingBloc>()
+                            .add(const OnboardingCompleted()),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),

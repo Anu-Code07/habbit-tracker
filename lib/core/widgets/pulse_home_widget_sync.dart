@@ -12,7 +12,7 @@ class PulseHomeWidgetSync {
   })  : _getTodayHabits = getTodayHabits,
         _getTodayFocusMinutes = getTodayFocusMinutes;
 
-  static const appGroupId = 'group.com.pulse.pulse';
+  static const appGroupId = 'group.com.anurag.pulse';
   static const androidName = 'PulseHomeWidgetProvider';
   static const iOSName = 'PulseHomeWidget';
   static const qualifiedAndroidName = 'com.pulse.pulse.PulseHomeWidgetProvider';

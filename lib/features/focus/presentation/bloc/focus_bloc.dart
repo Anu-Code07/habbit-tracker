@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:live_activities/models/alert_config.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:pulse/features/focus/data/focus_live_activity_service.dart';
@@ -158,6 +159,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   final PulseHomeWidgetSync _homeWidgetSync;
   final _uuid = const Uuid();
   Timer? _timer;
+  bool _didWarnTenSeconds = false;
 
   Future<void> _onStarted(FocusStarted event, Emitter<FocusState> emit) async {
     await _liveActivity.init();
@@ -187,6 +189,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
 
   Future<void> _onMode(FocusModeChanged event, Emitter<FocusState> emit) async {
     _timer?.cancel();
+    _didWarnTenSeconds = false;
     await _liveActivity.end();
     final seconds = event.mode == FocusMode.pomodoro
         ? _settings.workMinutes * 60
@@ -231,6 +234,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     if (_settings.hapticsEnabled) {
       HapticFeedback.mediumImpact();
     }
+    _didWarnTenSeconds = false;
     emit(
       state.copyWith(
         isRunning: true,
@@ -286,6 +290,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
+    _didWarnTenSeconds = false;
     await _liveActivity.end();
     emit(
       state.copyWith(
@@ -307,11 +312,31 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     }
     final next = state.remainingSeconds - 1;
     emit(state.copyWith(remainingSeconds: next));
+
+    AlertConfig? islandAlert;
+    if (next == 10 || (next < 10 && !_didWarnTenSeconds)) {
+      _didWarnTenSeconds = true;
+      islandAlert = AlertConfig(
+        title: 'Almost done',
+        body: '10 seconds left',
+      );
+      await FocusTimerSounds.warningAlert();
+      if (_settings.hapticsEnabled) {
+        await HapticFeedback.mediumImpact();
+      }
+    } else if (next < 10) {
+      await FocusTimerSounds.warningTick();
+      if (_settings.hapticsEnabled) {
+        await HapticFeedback.selectionClick();
+      }
+    }
+
     await _liveActivity.update(
       modeLabel: state.modeLabel,
       remainingSeconds: next,
       totalSeconds: state.totalSeconds,
       isPaused: false,
+      alert: islandAlert,
     );
   }
 
@@ -320,10 +345,16 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
-    await _liveActivity.end();
+    await FocusTimerSounds.completed();
     if (_settings.hapticsEnabled) {
       await HapticFeedback.heavyImpact();
     }
+    await _liveActivity.end(
+      completionAlert: AlertConfig(
+        title: 'Focus complete',
+        body: 'Nice work — session finished',
+      ),
+    );
     // Timer-based elapsed excludes paused time; clamp to planned length.
     final fromTimer =
         (state.totalSeconds - state.remainingSeconds).clamp(0, state.totalSeconds);
