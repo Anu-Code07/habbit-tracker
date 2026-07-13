@@ -1,0 +1,71 @@
+{
+  "name": "Pulse",
+  "tag": "v1.0.0",
+  "version": "1.0.0",
+  "buildNumber": 1,
+  "releasedAt": "2026-07-13",
+  "applicationId": "com.pulse.pulse",
+  "repository": "https://github.com/Anu-Code07/habbit-tracker",
+  "summary": "First public release — calm habit tracking, focus timer, insights, widgets, and on-device backup.",
+  "platforms": {
+    "android": {
+      "minSdk": 24,
+      "artifact": "app-release.apk",
+      "buildCommand": "flutter build apk --release"
+    },
+    "ios": {
+      "minOs": "16.1",
+      "notes": "Live Activities and home widget require App Group group.com.pulse.pulse",
+      "buildCommand": "flutter build ipa --release"
+    }
+  },
+  "features": [
+    "Today habit grid with week/month calendar and greetings",
+    "Focus timer — Pomodoro or free, Cupertino length picker",
+    "Live Activities (iOS Dynamic Island / lock screen) and Android focus notification",
+    "Home screen widgets (iOS + Android)",
+    "Insights — weekly completion, check-in bars, focus minutes",
+    "Onboarding with optional name and starter habits",
+    "Settings — haptics, export/restore backup, reset data",
+    "Local-first storage (Drift/SQLite + SharedPreferences)"
+  ],
+  "changelog": [
+    {
+      "type": "feature",
+      "text": "Initial Pulse habit tracker and focus app"
+    },
+    {
+      "type": "feature",
+      "text": "Home widgets and Live Activities for focus sessions"
+    },
+    {
+      "type": "fix",
+      "text": "Focus Finish records elapsed time correctly"
+    },
+    {
+      "type": "fix",
+      "text": "Insights/Focus refresh when switching tabs; Pomodoro length syncs from Focus"
+    },
+    {
+      "type": "fix",
+      "text": "Starter habit dedupe; optional onboarding name"
+    },
+    {
+      "type": "ui",
+      "text": "Cupertino Pomodoro length picker on Focus"
+    },
+    {
+      "type": "docs",
+      "text": "README with Today, Focus, and Insights screenshots"
+    }
+  ],
+  "screenshots": [
+    "docs/screenshots/today.png",
+    "docs/screenshots/focus.png",
+    "docs/screenshots/insights.png"
+  ],
+  "signing": {
+    "android": "debug keys (replace with release keystore before store upload)",
+    "ios": "requires Apple Developer signing for device/TestFlight"
+  }
+}
