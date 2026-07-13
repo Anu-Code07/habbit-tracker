@@ -150,6 +150,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     on<FocusTimerReset>(_onReset);
     on<FocusTick>(_onTick);
     on<FocusTimerFinished>(_onFinished);
+    _liveActionSub = _liveActivity.actions.listen(_onLiveAction);
   }
 
   final SettingsRepository _settings;
@@ -159,7 +160,25 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   final PulseHomeWidgetSync _homeWidgetSync;
   final _uuid = const Uuid();
   Timer? _timer;
+  StreamSubscription<FocusLiveAction>? _liveActionSub;
   bool _didWarnTenSeconds = false;
+
+  void _onLiveAction(FocusLiveAction action) {
+    switch (action) {
+      case FocusLiveAction.pause:
+        if (state.isRunning) add(const FocusTimerPaused());
+      case FocusLiveAction.resume:
+        if (!state.isRunning &&
+            state.sessionStartedAt != null &&
+            !state.isCompleted) {
+          add(const FocusTimerResumed());
+        }
+      case FocusLiveAction.finish:
+        if (state.sessionStartedAt != null && !state.isCompleted) {
+          add(const FocusTimerFinished());
+        }
+    }
+  }
 
   Future<void> _onStarted(FocusStarted event, Emitter<FocusState> emit) async {
     await _liveActivity.init();
@@ -389,6 +408,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   @override
   Future<void> close() async {
     _timer?.cancel();
+    await _liveActionSub?.cancel();
     await _liveActivity.end();
     return super.close();
   }

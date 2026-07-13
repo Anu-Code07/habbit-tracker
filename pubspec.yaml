@@ -43,14 +43,15 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/branding/
+    # Only runtime images — keep launcher source out of the app bundle.
+    - assets/branding/pulse_onboarding_hero.webp
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/branding/pulse_app_icon.png
+  image_path: tooling/branding/pulse_app_icon.png
   adaptive_icon_background: "#0e0f0c"
-  adaptive_icon_foreground: assets/branding/pulse_app_icon.png
+  adaptive_icon_foreground: tooling/branding/pulse_app_icon.png
 
 flutter_native_splash:
   color: "#F3F6EF"

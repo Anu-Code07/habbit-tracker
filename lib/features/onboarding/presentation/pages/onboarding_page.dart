@@ -262,7 +262,7 @@ class _HeroIntro extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     Image.asset(
-                      'assets/branding/pulse_onboarding_hero.png',
+                      'assets/branding/pulse_onboarding_hero.webp',
                       fit: BoxFit.cover,
                     ),
                     DecoratedBox(

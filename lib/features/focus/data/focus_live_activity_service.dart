@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,8 @@ import 'package:live_activities/live_activities.dart';
 import 'package:live_activities/models/alert_config.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+enum FocusLiveAction { pause, resume, finish }
+
 class FocusLiveActivityService {
   FocusLiveActivityService();
 
@@ -13,11 +16,16 @@ class FocusLiveActivityService {
   static const activityId = 'pulse_focus';
 
   final LiveActivities _plugin = LiveActivities();
+  final _actionsController = StreamController<FocusLiveAction>.broadcast();
+  StreamSubscription<dynamic>? _urlSub;
+
   bool _initialized = false;
   bool _active = false;
 
   /// ActivityKit system id — required by [LiveActivities.updateActivity].
   String? _systemActivityId;
+
+  Stream<FocusLiveAction> get actions => _actionsController.stream;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -29,11 +37,44 @@ class FocusLiveActivityService {
         appGroupId: appGroupId,
         urlScheme: 'pulse',
       );
+      _listenUrlActions();
       _initialized = true;
     } catch (error, stack) {
       debugPrint('FocusLiveActivity init failed: $error\n$stack');
       _initialized = false;
     }
+  }
+
+  void _listenUrlActions() {
+    if (_urlSub != null) return;
+    if (!Platform.isIOS) return;
+
+    _urlSub = _plugin.urlSchemeStream().listen((data) {
+      final path = (data.path ?? '').toLowerCase().replaceAll('/', '');
+      final host = (data.host ?? '').toLowerCase();
+      final url = (data.url ?? '').toLowerCase();
+      final token = path.isNotEmpty
+          ? path
+          : (url.contains('/') ? url.split('/').last : '');
+
+      final action = switch (token.isNotEmpty ? token : host) {
+        'pause' => FocusLiveAction.pause,
+        'resume' => FocusLiveAction.resume,
+        'finish' || 'stop' => FocusLiveAction.finish,
+        _ when url.contains('focus/pause') => FocusLiveAction.pause,
+        _ when url.contains('focus/resume') => FocusLiveAction.resume,
+        _ when url.contains('focus/finish') || url.contains('focus/stop') =>
+          FocusLiveAction.finish,
+        _ => null,
+      };
+
+      if (action != null) {
+        debugPrint('FocusLiveActivity action from Live Activity: $action');
+        _actionsController.add(action);
+      }
+    }, onError: (Object error) {
+      debugPrint('FocusLiveActivity url scheme error: $error');
+    });
   }
 
   Future<void> _ensureNotificationPermission() async {
@@ -269,6 +310,12 @@ class FocusLiveActivityService {
 
     _active = false;
     _systemActivityId = null;
+  }
+
+  Future<void> dispose() async {
+    await _urlSub?.cancel();
+    _urlSub = null;
+    await _actionsController.close();
   }
 }
 

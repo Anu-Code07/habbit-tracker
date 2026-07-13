@@ -111,8 +111,10 @@ class _FocusSetupView extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    _format(state.totalSeconds),
-                                    style: PulseTypography.timerDisplay(),
+                                    _formatLength(state.totalSeconds),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PulseTypography.displaySm(),
                                   ),
                                 ),
                                 Icon(
@@ -130,8 +132,9 @@ class _FocusSetupView extends StatelessWidget {
                         ),
                       ] else ...[
                         Text(
-                          _format(state.totalSeconds),
-                          style: PulseTypography.timerDisplay(),
+                          _formatLength(state.totalSeconds),
+                          maxLines: 1,
+                          style: PulseTypography.displaySm(),
                         ),
                         Text(
                           'Up to 60 minutes',
@@ -229,14 +232,10 @@ class _ActiveFocusView extends StatelessWidget {
                       ),
                     ),
               const Spacer(),
-              Text(
-                _format(
-                  state.isCompleted
-                      ? state.elapsedSeconds
-                      : state.remainingSeconds,
-                ),
-                style: PulseTypography.timerDisplay(color: PulseColors.ink),
-                textAlign: TextAlign.center,
+              _FocusTimerReadout(
+                totalSeconds: state.isCompleted
+                    ? state.elapsedSeconds
+                    : state.remainingSeconds,
               ),
               const SizedBox(height: PulseSpacing.sm),
               Text(
@@ -372,8 +371,70 @@ class _TipChip extends StatelessWidget {
   }
 }
 
-String _format(int totalSeconds) {
+String _formatLength(int totalSeconds) {
   final m = totalSeconds ~/ 60;
   final s = totalSeconds % 60;
-  return '$m min ${s.toString().padLeft(2, '0')} s';
+  if (s == 0) return '$m min';
+  return '$m min ${s.toString().padLeft(2, '0')}s';
+}
+
+class _FocusTimerReadout extends StatelessWidget {
+  const _FocusTimerReadout({required this.totalSeconds});
+
+  final int totalSeconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final safe = totalSeconds.clamp(0, 99 * 3600);
+    final hours = safe ~/ 3600;
+    final minutes = (safe % 3600) ~/ 60;
+    final seconds = safe % 60;
+
+    final parts = <(String, String)>[
+      if (hours > 0) (hours.toString(), 'hr'),
+      (
+        hours > 0
+            ? minutes.toString().padLeft(2, '0')
+            : minutes.toString(),
+        'min',
+      ),
+      (seconds.toString().padLeft(2, '0'), 'sec'),
+    ];
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        for (var i = 0; i < parts.length; i++) ...[
+          if (i > 0) const SizedBox(width: 14),
+          _TimeUnit(value: parts[i].$1, unit: parts[i].$2),
+        ],
+      ],
+    );
+  }
+}
+
+class _TimeUnit extends StatelessWidget {
+  const _TimeUnit({required this.value, required this.unit});
+
+  final String value;
+  final String unit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: PulseTypography.timerDisplay(color: PulseColors.ink),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          unit,
+          style: PulseTypography.caption(color: PulseColors.inkDeep),
+        ),
+      ],
+    );
+  }
 }

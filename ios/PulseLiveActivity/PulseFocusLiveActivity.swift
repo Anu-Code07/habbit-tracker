@@ -13,31 +13,35 @@ struct PulseLiveActivityBundle: WidgetBundle {
 struct PulseFocusLiveActivity: Widget {
   let sharedDefault = UserDefaults(suiteName: "group.com.anurag.pulse")
 
+  // Lock-screen Live Activities inherit dark-mode text (white) by default.
+  // Our tint is light lime — force dark ink for readable contrast.
+  private let ink = Color(red: 0.05, green: 0.06, blue: 0.05)
+  private let bodyMuted = Color(red: 0.27, green: 0.28, blue: 0.27)
+
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: LiveActivitiesAppAttributes.self) { context in
       lockScreenView(context: context)
         .activityBackgroundTint(tintColor(context: context))
-        .activitySystemActionForegroundColor(Color(red: 0.05, green: 0.06, blue: 0.05))
+        .activitySystemActionForegroundColor(ink)
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           Text("Pulse")
-            .font(.headline)
-            .foregroundColor(Color(red: 0.05, green: 0.06, blue: 0.05))
+            .font(.headline.weight(.semibold))
+            .foregroundColor(.white)
         }
         DynamicIslandExpandedRegion(.trailing) {
           remainingText(context: context)
             .font(.title2.bold().monospacedDigit())
             .foregroundColor(accentColor(context: context))
         }
+        DynamicIslandExpandedRegion(.center) {
+          Text(status(context: context))
+            .font(.caption.weight(.semibold))
+            .foregroundColor(accentColor(context: context))
+        }
         DynamicIslandExpandedRegion(.bottom) {
-          HStack {
-            Text(subtitle(context: context))
-            Spacer()
-            Text(status(context: context))
-              .foregroundColor(accentColor(context: context))
-          }
-          .font(.subheadline)
+          controlButtons(context: context, compact: true)
         }
       } compactLeading: {
         Image(systemName: isWarning(context: context) ? "exclamationmark.circle.fill" : "timer")
@@ -45,7 +49,7 @@ struct PulseFocusLiveActivity: Widget {
       } compactTrailing: {
         remainingText(context: context)
           .font(.caption.bold().monospacedDigit())
-          .foregroundColor(accentColor(context: context))
+          .foregroundColor(.white)
       } minimal: {
         Image(systemName: isWarning(context: context) ? "exclamationmark.circle.fill" : "timer")
           .foregroundColor(accentColor(context: context))
@@ -55,23 +59,92 @@ struct PulseFocusLiveActivity: Widget {
 
   @ViewBuilder
   private func lockScreenView(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> some View {
-    HStack(spacing: 16) {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(title(context: context))
-          .font(.headline)
-        Text(subtitle(context: context))
-          .font(.subheadline)
-          .foregroundColor(.secondary)
-        Text(status(context: context))
-          .font(.caption)
-          .foregroundColor(accentColor(context: context))
+    VStack(spacing: 12) {
+      HStack(alignment: .center, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text(title(context: context))
+            .font(.headline.weight(.semibold))
+            .foregroundColor(ink)
+          Text("\(subtitle(context: context)) · \(status(context: context))")
+            .font(.caption.weight(.semibold))
+            .foregroundColor(bodyMuted)
+            .lineLimit(1)
+        }
+        Spacer(minLength: 8)
+        remainingText(context: context)
+          .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
+          .foregroundColor(ink)
+          .minimumScaleFactor(0.7)
+          .lineLimit(1)
       }
-      Spacer()
-      remainingText(context: context)
-        .font(.system(size: 34, weight: .bold, design: .rounded).monospacedDigit())
-        .foregroundColor(accentColor(context: context))
+
+      // Controls sit on the bottom of the Live Activity card.
+      controlButtons(context: context, compact: false)
     }
-    .padding(20)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 14)
+  }
+
+  @ViewBuilder
+  private func controlButtons(
+    context: ActivityViewContext<LiveActivitiesAppAttributes>,
+    compact: Bool
+  ) -> some View {
+    HStack(spacing: 10) {
+      if isPaused(context: context) {
+        Link(destination: URL(string: "pulse://focus/resume")!) {
+          controlChip(
+            title: "Resume",
+            systemImage: "play.fill",
+            filled: true,
+            compact: compact
+          )
+        }
+        .buttonStyle(.plain)
+      } else {
+        Link(destination: URL(string: "pulse://focus/pause")!) {
+          controlChip(
+            title: "Pause",
+            systemImage: "pause.fill",
+            filled: false,
+            compact: compact
+          )
+        }
+        .buttonStyle(.plain)
+      }
+
+      Link(destination: URL(string: "pulse://focus/finish")!) {
+        controlChip(
+          title: "Finish",
+          systemImage: "checkmark",
+          filled: true,
+          compact: compact
+        )
+      }
+      .buttonStyle(.plain)
+    }
+  }
+
+  @ViewBuilder
+  private func controlChip(
+    title: String,
+    systemImage: String,
+    filled: Bool,
+    compact: Bool
+  ) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: systemImage)
+        .font(.system(size: compact ? 12 : 13, weight: .semibold))
+      Text(title)
+        .font(.system(size: compact ? 13 : 14, weight: .semibold))
+    }
+    .foregroundColor(filled ? Color(red: 0.05, green: 0.06, blue: 0.05) : ink)
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, compact ? 8 : 10)
+    .background(
+      Capsule()
+        .fill(filled ? Color(red: 0.62, green: 0.91, blue: 0.44) : Color.white.opacity(0.72))
+    )
   }
 
   @ViewBuilder
@@ -79,7 +152,6 @@ struct PulseFocusLiveActivity: Widget {
     if isPaused(context: context) {
       Text(fallbackRemainingLabel(context: context))
     } else if let end = endDate(context: context), end > Date() {
-      // Native countdown keeps ticking even when Flutter updates throttle.
       Text(timerInterval: Date()...end, countsDown: true)
         .monospacedDigit()
         .multilineTextAlignment(.trailing)
@@ -146,7 +218,7 @@ struct PulseFocusLiveActivity: Widget {
     if isWarning(context: context) {
       return Color(red: 0.86, green: 0.45, blue: 0.12)
     }
-    return Color(red: 0.18, green: 0.68, blue: 0.29)
+    return Color(red: 0.12, green: 0.48, blue: 0.22)
   }
 
   private func tintColor(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> Color {
