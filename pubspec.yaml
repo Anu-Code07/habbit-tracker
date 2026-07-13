@@ -54,7 +54,7 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: tooling/branding/pulse_app_icon.png
-  adaptive_icon_background: "#0e0f0c"
+  adaptive_icon_background: "#EEF5E7"
   adaptive_icon_foreground: tooling/branding/pulse_app_icon.png
 
 flutter_native_splash:
