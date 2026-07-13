@@ -10,13 +10,18 @@
   "platforms": {
     "android": {
       "minSdk": 24,
-      "artifact": "app-release.apk",
-      "buildCommand": "flutter build apk --release"
+      "artifact": "build/app/outputs/flutter-apk/app-release.apk",
+      "aab": "build/app/outputs/bundle/release/app-release.aab",
+      "buildCommand": "flutter build apk --release --no-tree-shake-icons",
+      "aabCommand": "flutter build appbundle --release --no-tree-shake-icons",
+      "script": "./scripts/release_build.sh apk",
+      "notes": "--no-tree-shake-icons required (habit icons use runtime IconData)"
     },
     "ios": {
       "minOs": "16.1",
       "notes": "Live Activities and home widget require App Group group.com.pulse.pulse",
-      "buildCommand": "flutter build ipa --release"
+      "buildCommand": "flutter build ipa --release",
+      "script": "./scripts/release_build.sh ipa"
     }
   },
   "features": [
