@@ -23,13 +23,6 @@ class SettingsHapticsChanged extends SettingsEvent {
   List<Object?> get props => [enabled];
 }
 
-class SettingsWorkMinutesChanged extends SettingsEvent {
-  const SettingsWorkMinutesChanged(this.minutes);
-  final int minutes;
-  @override
-  List<Object?> get props => [minutes];
-}
-
 class SettingsDataReset extends SettingsEvent {
   const SettingsDataReset();
 }
@@ -117,10 +110,6 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<SettingsHapticsChanged>((e, emit) async {
       await _settings.setHapticsEnabled(e.enabled);
       emit(state.copyWith(hapticsEnabled: e.enabled));
-    });
-    on<SettingsWorkMinutesChanged>((e, emit) async {
-      await _settings.setWorkMinutes(e.minutes);
-      emit(state.copyWith(workMinutes: e.minutes));
     });
     on<SettingsDataReset>((_, emit) async {
       await _clearHabitData();
