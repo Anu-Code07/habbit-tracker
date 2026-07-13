@@ -6,6 +6,7 @@ import 'package:pulse/core/theme/pulse_radii.dart';
 import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 import 'package:pulse/core/widgets/pulse_glass.dart';
+import 'package:pulse/core/widgets/pulse_minutes_picker.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
 import 'package:pulse/features/focus/presentation/bloc/focus_bloc.dart';
 
@@ -29,8 +30,19 @@ class _FocusSetupView extends StatelessWidget {
   const _FocusSetupView({required this.state});
   final FocusState state;
 
+  Future<void> _pickPomodoro(BuildContext context) async {
+    final minutes = await showPulseMinutesPicker(
+      context,
+      initialMinutes: state.totalSeconds ~/ 60,
+    );
+    if (minutes == null || !context.mounted) return;
+    context.read<FocusBloc>().add(FocusDurationChanged(minutes));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isPomodoro = state.mode == FocusMode.pomodoro;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: PulseAtmosphere(
@@ -41,66 +53,105 @@ class _FocusSetupView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text('Focus', style: PulseTypography.displayMd()),
-              const SizedBox(height: PulseSpacing.sm),
-              Text(
-                'Today · ${state.todayMinutes} focused minutes',
-                style: PulseTypography.bodyMd(),
-              ),
-              const SizedBox(height: PulseSpacing.xxl),
-              PulseCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Mode', style: PulseTypography.bodySmStrong()),
-                    const SizedBox(height: PulseSpacing.md),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ModeChip(
-                            label: 'Pomodoro',
-                            selected: state.mode == FocusMode.pomodoro,
-                            onTap: () => context.read<FocusBloc>().add(
-                                  const FocusModeChanged(FocusMode.pomodoro),
+                const SizedBox(height: PulseSpacing.sm),
+                Text(
+                  'Today · ${state.todayMinutes} focused minutes',
+                  style: PulseTypography.bodyMd(),
+                ),
+                const SizedBox(height: PulseSpacing.xxl),
+                PulseCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Mode', style: PulseTypography.bodySmStrong()),
+                      const SizedBox(height: PulseSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ModeChip(
+                              label: 'Pomodoro',
+                              selected: isPomodoro,
+                              onTap: () => context.read<FocusBloc>().add(
+                                    const FocusModeChanged(FocusMode.pomodoro),
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: PulseSpacing.md),
+                          Expanded(
+                            child: _ModeChip(
+                              label: 'Free',
+                              selected: !isPomodoro,
+                              onTap: () => context.read<FocusBloc>().add(
+                                    const FocusModeChanged(FocusMode.free),
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: PulseSpacing.xl),
+                      if (isPomodoro) ...[
+                        Text(
+                          'Length',
+                          style: PulseTypography.bodySmStrong(),
+                        ),
+                        const SizedBox(height: PulseSpacing.sm),
+                        GestureDetector(
+                          onTap: () => _pickPomodoro(context),
+                          child: PulseGlass(
+                            tint: PulseColors.primaryPale,
+                            opacity: 0.65,
+                            blur: 10,
+                            borderRadius:
+                                BorderRadius.circular(PulseRadii.lg),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PulseSpacing.lg,
+                              vertical: PulseSpacing.md,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _format(state.totalSeconds),
+                                    style: PulseTypography.timerDisplay(),
+                                  ),
                                 ),
+                                Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: PulseColors.ink.withValues(alpha: 0.7),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: PulseSpacing.md),
-                        Expanded(
-                          child: _ModeChip(
-                            label: 'Free',
-                            selected: state.mode == FocusMode.free,
-                            onTap: () => context.read<FocusBloc>().add(
-                                  const FocusModeChanged(FocusMode.free),
-                                ),
-                          ),
+                        const SizedBox(height: PulseSpacing.sm),
+                        Text(
+                          'Tap to choose · deep work block',
+                          style: PulseTypography.bodySm(),
+                        ),
+                      ] else ...[
+                        Text(
+                          _format(state.totalSeconds),
+                          style: PulseTypography.timerDisplay(),
+                        ),
+                        Text(
+                          'Up to 60 minutes',
+                          style: PulseTypography.bodySm(),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: PulseSpacing.xl),
-                    Text(
-                      _format(state.totalSeconds),
-                      style: PulseTypography.timerDisplay(),
-                    ),
-                    Text(
-                      state.mode == FocusMode.pomodoro
-                          ? 'Deep work block'
-                          : 'Up to 60 minutes',
-                      style: PulseTypography.bodySm(),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              const Spacer(),
-              PulsePrimaryButton(
-                label: 'Start focus',
-                onPressed: () => context
-                    .read<FocusBloc>()
-                    .add(const FocusTimerStarted()),
-              ),
-            ],
+                const Spacer(),
+                PulsePrimaryButton(
+                  label: 'Start focus',
+                  onPressed: () => context
+                      .read<FocusBloc>()
+                      .add(const FocusTimerStarted()),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

@@ -30,6 +30,13 @@ class FocusModeChanged extends FocusEvent {
   List<Object?> get props => [mode];
 }
 
+class FocusDurationChanged extends FocusEvent {
+  const FocusDurationChanged(this.minutes);
+  final int minutes;
+  @override
+  List<Object?> get props => [minutes];
+}
+
 class FocusTimerStarted extends FocusEvent {
   const FocusTimerStarted();
 }
@@ -135,6 +142,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         super(const FocusState()) {
     on<FocusStarted>(_onStarted);
     on<FocusModeChanged>(_onMode);
+    on<FocusDurationChanged>(_onDuration);
     on<FocusTimerStarted>(_onStartTimer);
     on<FocusTimerPaused>(_onPause);
     on<FocusTimerResumed>(_onResume);
@@ -190,6 +198,26 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         remainingSeconds: seconds,
         elapsedSeconds: 0,
         isRunning: false,
+        isCompleted: false,
+        clearSession: true,
+      ),
+    );
+  }
+
+  Future<void> _onDuration(
+    FocusDurationChanged event,
+    Emitter<FocusState> emit,
+  ) async {
+    if (state.isRunning || state.sessionStartedAt != null) return;
+    final minutes = event.minutes.clamp(1, 120);
+    await _settings.setWorkMinutes(minutes);
+    if (state.mode != FocusMode.pomodoro) return;
+    final seconds = minutes * 60;
+    emit(
+      state.copyWith(
+        totalSeconds: seconds,
+        remainingSeconds: seconds,
+        elapsedSeconds: 0,
         isCompleted: false,
         clearSession: true,
       ),

@@ -6,6 +6,7 @@ import 'package:pulse/core/theme/pulse_colors.dart';
 import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 import 'package:pulse/core/widgets/pulse_glass.dart';
+import 'package:pulse/core/widgets/pulse_minutes_picker.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
 import 'package:pulse/features/settings/presentation/bloc/settings_bloc.dart';
 
@@ -85,27 +86,21 @@ class SettingsPage extends StatelessWidget {
                             '${state.workMinutes} minutes',
                             style: PulseTypography.bodySm(),
                           ),
-                          trailing: DropdownButton<int>(
-                            value: state.workMinutes,
-                            underline: const SizedBox.shrink(),
-                            items: const [15, 25, 45, 50]
-                                .map(
-                                  (m) => DropdownMenuItem(
-                                    value: m,
-                                    child: Text('$m'),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: state.busy
-                                ? null
-                                : (v) {
-                                    if (v != null) {
-                                      context.read<SettingsBloc>().add(
-                                            SettingsWorkMinutesChanged(v),
-                                          );
-                                    }
-                                  },
-                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: state.busy
+                              ? null
+                              : () async {
+                                  final minutes = await showPulseMinutesPicker(
+                                    context,
+                                    initialMinutes: state.workMinutes,
+                                  );
+                                  if (minutes == null || !context.mounted) {
+                                    return;
+                                  }
+                                  context.read<SettingsBloc>().add(
+                                        SettingsWorkMinutesChanged(minutes),
+                                      );
+                                },
                         ),
                       ],
                     ),
