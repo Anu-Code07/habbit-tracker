@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:pulse/features/focus/data/focus_live_activity_service.dart';
 import 'package:pulse/features/focus/domain/entities/focus_session.dart';
+import 'package:pulse/features/focus/domain/focus_quotes.dart';
 import 'package:pulse/features/focus/domain/usecases/focus_usecases.dart';
 import 'package:pulse/core/widgets/pulse_home_widget_sync.dart';
 import 'package:pulse/features/settings/data/settings_repository.dart';
@@ -72,6 +73,7 @@ class FocusState extends Equatable {
     this.isCompleted = false,
     this.todayMinutes = 0,
     this.sessionStartedAt,
+    this.sessionQuote,
   });
 
   final FocusMode mode;
@@ -82,6 +84,7 @@ class FocusState extends Equatable {
   final bool isCompleted;
   final int todayMinutes;
   final DateTime? sessionStartedAt;
+  final String? sessionQuote;
 
   double get progress {
     if (totalSeconds == 0) return 0;
@@ -100,6 +103,7 @@ class FocusState extends Equatable {
     bool? isCompleted,
     int? todayMinutes,
     DateTime? sessionStartedAt,
+    String? sessionQuote,
     bool clearSession = false,
   }) {
     return FocusState(
@@ -112,6 +116,7 @@ class FocusState extends Equatable {
       todayMinutes: todayMinutes ?? this.todayMinutes,
       sessionStartedAt:
           clearSession ? null : (sessionStartedAt ?? this.sessionStartedAt),
+      sessionQuote: clearSession ? null : (sessionQuote ?? this.sessionQuote),
     );
   }
 
@@ -125,6 +130,7 @@ class FocusState extends Equatable {
         isCompleted,
         todayMinutes,
         sessionStartedAt,
+        sessionQuote,
       ];
 }
 
@@ -254,16 +260,18 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       HapticFeedback.mediumImpact();
     }
     _didWarnTenSeconds = false;
+    final quote = PulseFocusQuotes.next();
     emit(
       state.copyWith(
         isRunning: true,
         isCompleted: false,
         elapsedSeconds: 0,
         sessionStartedAt: DateTime.now(),
+        sessionQuote: quote,
       ),
     );
     await _liveActivity.start(
-      modeLabel: state.modeLabel,
+      quote: quote,
       remainingSeconds: state.remainingSeconds,
       totalSeconds: state.totalSeconds,
     );
@@ -280,7 +288,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _timer?.cancel();
     emit(state.copyWith(isRunning: false));
     await _liveActivity.update(
-      modeLabel: state.modeLabel,
+      quote: state.sessionQuote ?? 'Stay with it',
       remainingSeconds: state.remainingSeconds,
       totalSeconds: state.totalSeconds,
       isPaused: true,
@@ -293,7 +301,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   ) async {
     emit(state.copyWith(isRunning: true));
     await _liveActivity.update(
-      modeLabel: state.modeLabel,
+      quote: state.sessionQuote ?? 'Stay with it',
       remainingSeconds: state.remainingSeconds,
       totalSeconds: state.totalSeconds,
       isPaused: false,
@@ -356,7 +364,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     }
 
     await _liveActivity.update(
-      modeLabel: state.modeLabel,
+      quote: state.sessionQuote ?? 'Stay with it',
       remainingSeconds: next,
       totalSeconds: state.totalSeconds,
       isPaused: false,
@@ -376,10 +384,11 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       await HapticFeedback.heavyImpact();
     }
     await _liveActivity.end(
+      quote: state.sessionQuote,
       completionAlert: _settings.completionSoundEnabled
           ? AlertConfig(
               title: 'Focus complete',
-              body: 'Nice work — session finished',
+              body: state.sessionQuote ?? 'Nice work — session finished',
               sound: 'default',
             )
           : null,

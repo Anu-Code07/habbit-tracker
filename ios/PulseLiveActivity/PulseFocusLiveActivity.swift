@@ -36,9 +36,11 @@ struct PulseFocusLiveActivity: Widget {
             .foregroundColor(accentColor(context: context))
         }
         DynamicIslandExpandedRegion(.center) {
-          Text(status(context: context))
+          Text(quoteLine(context: context))
             .font(.caption.weight(.semibold))
             .foregroundColor(accentColor(context: context))
+            .lineLimit(2)
+            .multilineTextAlignment(.center)
         }
         DynamicIslandExpandedRegion(.bottom) {
           controlButtons(context: context, compact: true)
@@ -60,15 +62,16 @@ struct PulseFocusLiveActivity: Widget {
   @ViewBuilder
   private func lockScreenView(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> some View {
     VStack(spacing: 12) {
-      HStack(alignment: .center, spacing: 12) {
-        VStack(alignment: .leading, spacing: 3) {
+      HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
           Text(title(context: context))
             .font(.headline.weight(.semibold))
             .foregroundColor(ink)
-          Text("\(subtitle(context: context)) · \(status(context: context))")
-            .font(.caption.weight(.semibold))
+          Text(quoteLine(context: context))
+            .font(.caption.weight(.medium))
             .foregroundColor(bodyMuted)
-            .lineLimit(1)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
         }
         Spacer(minLength: 8)
         remainingText(context: context)
@@ -184,18 +187,25 @@ struct PulseFocusLiveActivity: Widget {
   }
 
   private func subtitle(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> String {
+    let quote = string(context, "quote")
+    if !quote.isEmpty { return quote }
     let value = string(context, "subtitle")
-    return value.isEmpty ? "Focus session" : value
+    return value.isEmpty ? "Stay with it" : value
+  }
+
+  private func quoteLine(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> String {
+    let quote = subtitle(context: context)
+    if isPaused(context: context) {
+      return "\(quote) · Paused"
+    }
+    if isWarning(context: context) {
+      return "\(quote) · Wrapping up"
+    }
+    return quote
   }
 
   private func isPaused(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> Bool {
     string(context, "status") == "paused"
-  }
-
-  private func status(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> String {
-    if isPaused(context: context) { return "Paused" }
-    if isWarning(context: context) { return "Wrapping up" }
-    return "Focusing"
   }
 
   private func fallbackRemainingLabel(context: ActivityViewContext<LiveActivitiesAppAttributes>) -> String {

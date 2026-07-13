@@ -239,7 +239,9 @@ class _ActiveFocusView extends StatelessWidget {
               ),
               const SizedBox(height: PulseSpacing.sm),
               Text(
-                state.isCompleted ? 'Session complete' : 'Stay with it',
+                state.isCompleted
+                    ? 'Session complete'
+                    : (state.sessionQuote ?? 'Stay with it'),
                 style: PulseTypography.bodyLg(color: PulseColors.inkDeep),
                 textAlign: TextAlign.center,
               ),

@@ -85,7 +85,7 @@ class FocusLiveActivityService {
   }
 
   Map<String, dynamic> _payload({
-    required String modeLabel,
+    required String quote,
     required int remainingSeconds,
     required int totalSeconds,
     required bool isPaused,
@@ -105,7 +105,8 @@ class FocusLiveActivityService {
 
     return <String, dynamic>{
       'title': 'Pulse Focus',
-      'subtitle': modeLabel,
+      'subtitle': quote,
+      'quote': quote,
       'remainingLabel': remainingLabel,
       'remainingSeconds': safeRemaining,
       'totalSeconds': totalSeconds,
@@ -148,7 +149,7 @@ class FocusLiveActivityService {
   /// Starts (or restarts) the focus Live Activity so Dynamic Island shows
   /// the timer as soon as the session begins.
   Future<void> start({
-    required String modeLabel,
+    required String quote,
     required int remainingSeconds,
     required int totalSeconds,
   }) async {
@@ -173,7 +174,7 @@ class FocusLiveActivityService {
     await _clearExisting();
 
     final data = _payload(
-      modeLabel: modeLabel,
+      quote: quote,
       remainingSeconds: remainingSeconds,
       totalSeconds: totalSeconds,
       isPaused: false,
@@ -207,7 +208,7 @@ class FocusLiveActivityService {
           data,
           AlertConfig(
             title: 'Pulse Focus',
-            body: '$modeLabel · ${remainingLabel(remainingSeconds)}',
+            body: quote,
           ),
         );
       }
@@ -241,7 +242,7 @@ class FocusLiveActivityService {
   }
 
   Future<void> update({
-    required String modeLabel,
+    required String quote,
     required int remainingSeconds,
     required int totalSeconds,
     required bool isPaused,
@@ -250,7 +251,7 @@ class FocusLiveActivityService {
     if (!_active) return;
 
     final data = _payload(
-      modeLabel: modeLabel,
+      quote: quote,
       remainingSeconds: remainingSeconds,
       totalSeconds: totalSeconds,
       isPaused: isPaused,
@@ -279,7 +280,7 @@ class FocusLiveActivityService {
     }
   }
 
-  Future<void> end({AlertConfig? completionAlert}) async {
+  Future<void> end({AlertConfig? completionAlert, String? quote}) async {
     if (!_active && _systemActivityId == null) return;
 
     try {
@@ -290,7 +291,7 @@ class FocusLiveActivityService {
           await _plugin.updateActivity(
             systemId,
             _payload(
-              modeLabel: 'Done',
+              quote: quote ?? 'Session complete',
               remainingSeconds: 0,
               totalSeconds: 1,
               isPaused: false,
