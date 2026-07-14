@@ -202,8 +202,8 @@ class _TodayBodyState extends State<_TodayBody> {
                 const Padding(
                   padding: EdgeInsets.only(left: PulseSpacing.xs),
                   child: SizedBox(
-                    width: 64,
-                    height: 64,
+                    width: 72,
+                    height: 72,
                     child: _TodayPulseMark(),
                   ),
                 ),
