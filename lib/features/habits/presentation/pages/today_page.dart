@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:intl/intl.dart';
+import 'package:lottie/lottie.dart';
 
 import 'package:pulse/core/theme/habit_palette.dart';
 import 'package:pulse/core/theme/pulse_colors.dart';
@@ -183,21 +184,27 @@ class _TodayBodyState extends State<_TodayBody> {
               PulseSpacing.md,
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Text(
-                    widget.greeting,
-                    style: PulseTypography.displayMd(),
+                  child: Padding(
+                    padding: const EdgeInsets.only(
+                      right: PulseSpacing.xl,
+                      top: PulseSpacing.xs,
+                      bottom: PulseSpacing.xs,
+                    ),
+                    child: Text(
+                      widget.greeting,
+                      style: PulseTypography.displayMd(),
+                    ),
                   ),
                 ),
-                PulseGlass(
-                  tint: PulseColors.canvas,
-                  opacity: 0.55,
-                  blur: 12,
-                  borderRadius: BorderRadius.circular(PulseRadii.full),
-                  child: IconButton(
-                    onPressed: () => showHabitEditorSheet(context),
-                    icon: const Icon(Icons.edit_note_rounded),
+                const Padding(
+                  padding: EdgeInsets.only(left: PulseSpacing.xs),
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: _TodayPulseMark(),
                   ),
                 ),
               ],
@@ -396,6 +403,23 @@ class _TodayBodyState extends State<_TodayBody> {
   }
 }
 
+/// Soft branded breath mark — replaces the old header edit control.
+class _TodayPulseMark extends StatelessWidget {
+  const _TodayPulseMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Lottie.asset(
+        'assets/lottie/pulse_soft_breath.json',
+        fit: BoxFit.contain,
+        repeat: true,
+        frameRate: FrameRate.max,
+      ),
+    );
+  }
+}
+
 class _HabitCard extends StatelessWidget {
   const _HabitCard({
     required this.item,
@@ -425,7 +449,7 @@ class _HabitCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                IconData(habit.iconCode, fontFamily: 'MaterialIcons'),
+                HabitPalette.iconOf(habit.iconCode),
                 size: 28,
                 color: PulseColors.ink,
               ),

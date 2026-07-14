@@ -32,5 +32,13 @@ abstract final class HabitPalette {
     Icons.pets_rounded,
   ];
 
+  /// Resolves a stored [codePoint] to a const icon (avoids tree-shake / lint issues).
+  static IconData iconOf(int codePoint) {
+    for (final icon in icons) {
+      if (icon.codePoint == codePoint) return icon;
+    }
+    return Icons.menu_book_rounded;
+  }
+
   static Color of(int value) => Color(value);
 }
