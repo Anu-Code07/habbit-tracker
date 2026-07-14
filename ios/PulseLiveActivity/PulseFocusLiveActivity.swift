@@ -18,7 +18,7 @@ struct PulseFocusLiveActivity: Widget {
       LockScreenLiveView(context: context, sharedDefault: sharedDefault)
     } dynamicIsland: { context in
       let palette = PulseLivePalette.island
-      DynamicIsland {
+      return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
           Text("Pulse")
             .font(.headline.weight(.semibold))
