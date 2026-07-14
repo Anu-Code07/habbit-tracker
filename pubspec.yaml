@@ -49,6 +49,9 @@ flutter:
     - assets/sounds/focus_tick.wav
     - assets/sounds/focus_warning.wav
     - assets/sounds/focus_complete.wav
+    - assets/sounds/focus_tick_wood.wav
+    - assets/sounds/focus_warning_wood.wav
+    - assets/sounds/focus_complete_wood.wav
 
 flutter_launcher_icons:
   android: true

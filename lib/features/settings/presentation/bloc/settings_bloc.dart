@@ -5,6 +5,7 @@ import 'package:pulse/core/database/pulse_backup_service.dart';
 import 'package:pulse/features/focus/domain/usecases/focus_usecases.dart';
 import 'package:pulse/features/habits/domain/usecases/habit_usecases.dart';
 import 'package:pulse/features/settings/data/settings_repository.dart';
+import 'package:pulse/features/settings/domain/focus_sound_pack.dart';
 
 sealed class SettingsEvent extends Equatable {
   const SettingsEvent();
@@ -44,6 +45,13 @@ class SettingsFocusTickSoundChanged extends SettingsEvent {
   List<Object?> get props => [enabled];
 }
 
+class SettingsSoundPackChanged extends SettingsEvent {
+  const SettingsSoundPackChanged(this.pack);
+  final FocusSoundPack pack;
+  @override
+  List<Object?> get props => [pack];
+}
+
 class SettingsDataReset extends SettingsEvent {
   const SettingsDataReset();
 }
@@ -62,6 +70,7 @@ class SettingsState extends Equatable {
     this.completionSoundEnabled = true,
     this.warningSoundEnabled = true,
     this.focusTickSoundEnabled = true,
+    this.soundPack = FocusSoundPack.soft,
     this.workMinutes = 25,
     this.breakMinutes = 5,
     this.resetDone = false,
@@ -74,6 +83,7 @@ class SettingsState extends Equatable {
   final bool completionSoundEnabled;
   final bool warningSoundEnabled;
   final bool focusTickSoundEnabled;
+  final FocusSoundPack soundPack;
   final int workMinutes;
   final int breakMinutes;
   final bool resetDone;
@@ -86,6 +96,7 @@ class SettingsState extends Equatable {
     bool? completionSoundEnabled,
     bool? warningSoundEnabled,
     bool? focusTickSoundEnabled,
+    FocusSoundPack? soundPack,
     int? workMinutes,
     int? breakMinutes,
     bool? resetDone,
@@ -101,6 +112,7 @@ class SettingsState extends Equatable {
       warningSoundEnabled: warningSoundEnabled ?? this.warningSoundEnabled,
       focusTickSoundEnabled:
           focusTickSoundEnabled ?? this.focusTickSoundEnabled,
+      soundPack: soundPack ?? this.soundPack,
       workMinutes: workMinutes ?? this.workMinutes,
       breakMinutes: breakMinutes ?? this.breakMinutes,
       resetDone: resetDone ?? this.resetDone,
@@ -116,6 +128,7 @@ class SettingsState extends Equatable {
         completionSoundEnabled,
         warningSoundEnabled,
         focusTickSoundEnabled,
+        soundPack,
         workMinutes,
         breakMinutes,
         resetDone,
@@ -143,6 +156,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
           completionSoundEnabled: _settings.completionSoundEnabled,
           warningSoundEnabled: _settings.warningSoundEnabled,
           focusTickSoundEnabled: _settings.focusTickSoundEnabled,
+          soundPack: _settings.soundPack,
           workMinutes: _settings.workMinutes,
           breakMinutes: _settings.breakMinutes,
         ),
@@ -163,6 +177,10 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<SettingsFocusTickSoundChanged>((e, emit) async {
       await _settings.setFocusTickSoundEnabled(e.enabled);
       emit(state.copyWith(focusTickSoundEnabled: e.enabled));
+    });
+    on<SettingsSoundPackChanged>((e, emit) async {
+      await _settings.setSoundPack(e.pack);
+      emit(state.copyWith(soundPack: e.pack));
     });
     on<SettingsDataReset>((_, emit) async {
       await _clearHabitData();
@@ -203,6 +221,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
             completionSoundEnabled: _settings.completionSoundEnabled,
             warningSoundEnabled: _settings.warningSoundEnabled,
             focusTickSoundEnabled: _settings.focusTickSoundEnabled,
+            soundPack: _settings.soundPack,
             workMinutes: _settings.workMinutes,
             breakMinutes: _settings.breakMinutes,
             importDone: true,

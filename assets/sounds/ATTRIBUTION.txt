@@ -4,3 +4,6 @@ focus_tick.wav / focus_warning.wav
 
 focus_complete.wav
   Soft major-chord chime generated for Pulse (original, CC0).
+
+focus_complete_wood.wav / focus_warning_wood.wav / focus_tick_wood.wav
+  Wood pack plucks generated for Pulse (original, CC0).

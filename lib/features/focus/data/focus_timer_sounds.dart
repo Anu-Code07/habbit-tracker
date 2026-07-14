@@ -2,12 +2,10 @@ import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
-/// Focus countdown / completion chimes.
-///
-/// Uses [AssetSource] (proven on desktop) plus a fresh player per cue so a
-/// stuck Android MediaPlayer can't silence the next chime.
+import 'package:pulse/features/settings/domain/focus_sound_pack.dart';
+
+/// Focus countdown / completion chimes for Soft and Wood packs.
 abstract final class FocusTimerSounds {
   static bool _warmed = false;
 
@@ -17,7 +15,6 @@ abstract final class FocusTimerSounds {
           options: const {AVAudioSessionOptions.duckOthers},
         ),
         android: const AudioContextAndroid(
-          // Keep false — speakerphone routing fights media on Nothing OS.
           isSpeakerphoneOn: false,
           stayAwake: true,
           contentType: AndroidContentType.music,
@@ -26,13 +23,22 @@ abstract final class FocusTimerSounds {
         ),
       );
 
-  static Future<void> warmUp() async {
+  static String _asset(FocusSoundPack pack, String softName) {
+    if (pack == FocusSoundPack.wood) {
+      final stem = softName.replaceAll('.wav', '');
+      return 'sounds/${stem}_wood.wav';
+    }
+    return 'sounds/$softName';
+  }
+
+  static Future<void> warmUp(FocusSoundPack pack) async {
+    if (!pack.playsAudio) return;
     if (_warmed) return;
     try {
       await AudioPlayer.global.setAudioContext(_context);
       final probe = AudioPlayer();
       await probe.setAudioContext(_context);
-      await probe.setSource(AssetSource('sounds/focus_complete.wav'));
+      await probe.setSource(AssetSource(_asset(pack, 'focus_complete.wav')));
       await probe.dispose();
       _warmed = true;
     } catch (error, stack) {
@@ -59,7 +65,6 @@ abstract final class FocusTimerSounds {
         volume: v,
         mode: PlayerMode.mediaPlayer,
       );
-      debugPrint('FocusTimerSounds state=${player.state}');
       if (waitUntilDone) {
         try {
           await player.onPlayerComplete.first.timeout(
@@ -69,7 +74,6 @@ abstract final class FocusTimerSounds {
           // best-effort
         }
       } else {
-        // Let short ticks finish without holding the player.
         unawaited(
           player.onPlayerComplete.first
               .timeout(const Duration(seconds: 2))
@@ -80,9 +84,6 @@ abstract final class FocusTimerSounds {
       }
     } catch (error, stack) {
       debugPrint('FocusTimerSounds failed ($assetPath): $error\n$stack');
-      try {
-        await SystemSound.play(SystemSoundType.alert);
-      } catch (_) {}
     } finally {
       if (waitUntilDone) {
         try {
@@ -92,21 +93,25 @@ abstract final class FocusTimerSounds {
     }
   }
 
-  static Future<void> warningTick() => _play(
-        'sounds/focus_tick.wav',
-        volume: 1.0,
-      );
+  static Future<void> warningTick(FocusSoundPack pack) async {
+    if (!pack.playsAudio) return;
+    await _play(_asset(pack, 'focus_tick.wav'), volume: 0.85);
+  }
 
-  static Future<void> warningAlert() => _play(
-        'sounds/focus_warning.wav',
-        volume: 1.0,
-        waitUntilDone: true,
-      );
-
-  static Future<void> completed() async {
+  static Future<void> warningAlert(FocusSoundPack pack) async {
+    if (!pack.playsAudio) return;
     await _play(
-      'sounds/focus_complete.wav',
-      volume: 0.72,
+      _asset(pack, 'focus_warning.wav'),
+      volume: pack == FocusSoundPack.wood ? 0.8 : 1.0,
+      waitUntilDone: true,
+    );
+  }
+
+  static Future<void> completed(FocusSoundPack pack) async {
+    if (!pack.playsAudio) return;
+    await _play(
+      _asset(pack, 'focus_complete.wav'),
+      volume: pack == FocusSoundPack.wood ? 0.7 : 0.72,
       waitUntilDone: true,
     );
   }

@@ -26,14 +26,42 @@ class FocusPage extends StatelessWidget {
   }
 }
 
-class _FocusSetupView extends StatelessWidget {
+class _FocusSetupView extends StatefulWidget {
   const _FocusSetupView({required this.state});
   final FocusState state;
+
+  @override
+  State<_FocusSetupView> createState() => _FocusSetupViewState();
+}
+
+class _FocusSetupViewState extends State<_FocusSetupView> {
+  late final TextEditingController _titleController;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.state.sessionTitle);
+  }
+
+  @override
+  void didUpdateWidget(covariant _FocusSetupView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.state.sessionTitle != _titleController.text &&
+        widget.state.sessionTitle != oldWidget.state.sessionTitle) {
+      _titleController.text = widget.state.sessionTitle;
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickPomodoro(BuildContext context) async {
     final minutes = await showPulseMinutesPicker(
       context,
-      initialMinutes: state.totalSeconds ~/ 60,
+      initialMinutes: widget.state.totalSeconds ~/ 60,
     );
     if (minutes == null || !context.mounted) return;
     context.read<FocusBloc>().add(FocusDurationChanged(minutes));
@@ -41,6 +69,7 @@ class _FocusSetupView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     final isPomodoro = state.mode == FocusMode.pomodoro;
 
     return Scaffold(
@@ -63,6 +92,38 @@ class _FocusSetupView extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Text('Working on', style: PulseTypography.bodySmStrong()),
+                      const SizedBox(height: PulseSpacing.sm),
+                      TextField(
+                        controller: _titleController,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.done,
+                        maxLength: 48,
+                        onChanged: (value) => context
+                            .read<FocusBloc>()
+                            .add(FocusTitleChanged(value)),
+                        style: PulseTypography.bodyMdStrong(),
+                        decoration: InputDecoration(
+                          hintText: 'Optional — e.g. Write README',
+                          hintStyle: PulseTypography.bodyMd(
+                            color: PulseColors.mute,
+                          ),
+                          counterText: '',
+                          filled: true,
+                          fillColor: PulseColors.primaryPale.withValues(
+                            alpha: 0.45,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(PulseRadii.lg),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: PulseSpacing.lg,
+                            vertical: PulseSpacing.md,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: PulseSpacing.xl),
                       Text('Mode', style: PulseTypography.bodySmStrong()),
                       const SizedBox(height: PulseSpacing.md),
                       Row(
@@ -241,10 +302,20 @@ class _ActiveFocusView extends StatelessWidget {
               Text(
                 state.isCompleted
                     ? 'Session complete'
-                    : (state.sessionQuote ?? 'Stay with it'),
+                    : state.sessionHeadline,
                 style: PulseTypography.bodyLg(color: PulseColors.inkDeep),
                 textAlign: TextAlign.center,
               ),
+              if (!state.isCompleted &&
+                  state.sessionTitle.trim().isNotEmpty &&
+                  (state.sessionQuote?.isNotEmpty ?? false)) ...[
+                const SizedBox(height: PulseSpacing.xs),
+                Text(
+                  state.sessionQuote!,
+                  style: PulseTypography.bodySm(color: PulseColors.inkDeep),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: PulseSpacing.xxl),
               const _TipChip(
                 icon: Icons.music_note_rounded,

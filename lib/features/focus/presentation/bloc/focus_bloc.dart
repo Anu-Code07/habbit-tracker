@@ -43,6 +43,13 @@ class FocusDurationChanged extends FocusEvent {
   List<Object?> get props => [minutes];
 }
 
+class FocusTitleChanged extends FocusEvent {
+  const FocusTitleChanged(this.title);
+  final String title;
+  @override
+  List<Object?> get props => [title];
+}
+
 class FocusTimerStarted extends FocusEvent {
   const FocusTimerStarted();
 }
@@ -78,6 +85,7 @@ class FocusState extends Equatable {
     this.todayMinutes = 0,
     this.sessionStartedAt,
     this.sessionQuote,
+    this.sessionTitle = '',
   });
 
   final FocusMode mode;
@@ -89,6 +97,8 @@ class FocusState extends Equatable {
   final int todayMinutes;
   final DateTime? sessionStartedAt;
   final String? sessionQuote;
+  /// Optional user label for this focus block (e.g. "Write README").
+  final String sessionTitle;
 
   double get progress {
     if (totalSeconds == 0) return 0;
@@ -97,6 +107,13 @@ class FocusState extends Equatable {
 
   String get modeLabel =>
       mode == FocusMode.pomodoro ? 'Pomodoro' : 'Free focus';
+
+  /// Live Activity / active timer headline.
+  String get sessionHeadline {
+    final title = sessionTitle.trim();
+    if (title.isNotEmpty) return title;
+    return sessionQuote ?? 'Stay with it';
+  }
 
   FocusState copyWith({
     FocusMode? mode,
@@ -108,6 +125,7 @@ class FocusState extends Equatable {
     int? todayMinutes,
     DateTime? sessionStartedAt,
     String? sessionQuote,
+    String? sessionTitle,
     bool clearSession = false,
   }) {
     return FocusState(
@@ -121,6 +139,7 @@ class FocusState extends Equatable {
       sessionStartedAt:
           clearSession ? null : (sessionStartedAt ?? this.sessionStartedAt),
       sessionQuote: clearSession ? null : (sessionQuote ?? this.sessionQuote),
+      sessionTitle: sessionTitle ?? this.sessionTitle,
     );
   }
 
@@ -135,6 +154,7 @@ class FocusState extends Equatable {
         todayMinutes,
         sessionStartedAt,
         sessionQuote,
+        sessionTitle,
       ];
 }
 
@@ -154,6 +174,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     on<FocusStarted>(_onStarted);
     on<FocusModeChanged>(_onMode);
     on<FocusDurationChanged>(_onDuration);
+    on<FocusTitleChanged>(_onTitle);
     on<FocusTimerStarted>(_onStartTimer);
     on<FocusTimerPaused>(_onPause);
     on<FocusTimerResumed>(_onResume);
@@ -178,6 +199,17 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   /// Leftover milliseconds when paused — preserves sub-second accuracy on resume.
   int? _pausedRemainingMs;
   int _lastAnnouncedSecond = -1;
+
+  String get _liveLine => state.sessionHeadline;
+
+  bool get _warningOn =>
+      _settings.soundPack.playsAudio && _settings.warningSoundEnabled;
+
+  bool get _ticksOn =>
+      _settings.soundPack.playsAudio && _settings.focusTickSoundEnabled;
+
+  bool get _completionOn =>
+      _settings.soundPack.playsAudio && _settings.completionSoundEnabled;
 
   void _onLiveAction(FocusLiveAction action) {
     switch (action) {
@@ -290,6 +322,14 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     );
   }
 
+  Future<void> _onTitle(
+    FocusTitleChanged event,
+    Emitter<FocusState> emit,
+  ) async {
+    if (state.isRunning || state.isCompleted) return;
+    emit(state.copyWith(sessionTitle: event.title));
+  }
+
   Future<void> _onStartTimer(
     FocusTimerStarted event,
     Emitter<FocusState> emit,
@@ -317,23 +357,23 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         sessionQuote: quote,
       ),
     );
-    // Activate the audio session early so warning/completion chimes are heard.
-    await FocusTimerSounds.warmUp();
+    final liveLine = state.sessionHeadline;
+    await FocusTimerSounds.warmUp(_settings.soundPack);
     await _liveActivity.start(
-      quote: quote,
+      quote: liveLine,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       endsAt: endsAt,
     );
-    // OS alerts (iOS local notif / Android AlarmManager) — survive background.
     await FocusBackgroundAlerts.schedule(
       remainingSeconds: remaining,
       endsAt: endsAt,
-      quote: quote,
+      quote: liveLine,
       paused: false,
-      warningEnabled: _settings.warningSoundEnabled,
-      ticksEnabled: _settings.focusTickSoundEnabled,
-      completionEnabled: _settings.completionSoundEnabled,
+      warningEnabled: _warningOn,
+      ticksEnabled: _ticksOn,
+      completionEnabled: _completionOn,
+      soundPack: _settings.soundPack.storageValue,
     );
     _startTicker();
   }
@@ -351,7 +391,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     emit(state.copyWith(isRunning: false, remainingSeconds: remaining));
     await FocusBackgroundAlerts.cancel();
     await _liveActivity.update(
-      quote: state.sessionQuote ?? 'Stay with it',
+      quote: _liveLine,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: true,
@@ -374,7 +414,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _lastAnnouncedSecond = -1;
     emit(state.copyWith(isRunning: true, remainingSeconds: remaining));
     await _liveActivity.update(
-      quote: state.sessionQuote ?? 'Stay with it',
+      quote: _liveLine,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: false,
@@ -383,11 +423,12 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     await FocusBackgroundAlerts.schedule(
       remainingSeconds: remaining,
       endsAt: endsAt,
-      quote: state.sessionQuote ?? 'Stay with it',
+      quote: _liveLine,
       paused: false,
-      warningEnabled: _settings.warningSoundEnabled,
-      ticksEnabled: _settings.focusTickSoundEnabled,
-      completionEnabled: _settings.completionSoundEnabled,
+      warningEnabled: _warningOn,
+      ticksEnabled: _ticksOn,
+      completionEnabled: _completionOn,
+      soundPack: _settings.soundPack.storageValue,
     );
     _startTicker();
   }
@@ -445,35 +486,29 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     if (remaining == 10 || (remaining < 10 && !_didWarnTenSeconds)) {
       _didWarnTenSeconds = true;
       shouldPushLiveActivity = true;
-      if (_settings.warningSoundEnabled) {
+      if (_warningOn) {
         islandAlert = AlertConfig(
           title: 'Almost done',
           body: '10 seconds left',
         );
-        await FocusTimerSounds.warningAlert();
+        await FocusTimerSounds.warningAlert(_settings.soundPack);
       }
       if (_settings.hapticsEnabled) {
         await HapticFeedback.mediumImpact();
       }
     } else if (remaining < 10) {
-      // On iOS/Android, tick audio is OS-scheduled (AlarmManager / local
-      // notifications) so it still plays when Flutter is suspended. Playing
-      // AssetSource here would double-fire while the app is still alive.
       final osOwnsTicks = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
-      if (_settings.focusTickSoundEnabled && !osOwnsTicks) {
-        await FocusTimerSounds.warningTick();
+      if (_ticksOn && !osOwnsTicks) {
+        await FocusTimerSounds.warningTick(_settings.soundPack);
       }
       if (_settings.hapticsEnabled) {
         await HapticFeedback.selectionClick();
       }
     }
 
-    // iOS + Android both count down from a stable endAtMs (timerInterval /
-    // Chronometer). Only push an LA update for alerts / warning polish —
-    // not every second (that was resetting Android's clock).
     if (shouldPushLiveActivity) {
       await _liveActivity.update(
-        quote: state.sessionQuote ?? 'Stay with it',
+        quote: _liveLine,
         remainingSeconds: remaining,
         totalSeconds: state.totalSeconds,
         isPaused: false,
@@ -492,18 +527,18 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _pausedRemainingMs = null;
     _lastAnnouncedSecond = -1;
     await FocusBackgroundAlerts.cancel();
-    if (_settings.completionSoundEnabled) {
-      await FocusTimerSounds.completed();
+    if (_completionOn) {
+      await FocusTimerSounds.completed(_settings.soundPack);
     }
     if (_settings.hapticsEnabled) {
       await HapticFeedback.heavyImpact();
     }
     await _liveActivity.end(
-      quote: state.sessionQuote,
-      completionAlert: _settings.completionSoundEnabled
+      quote: _liveLine,
+      completionAlert: _completionOn
           ? AlertConfig(
               title: 'Focus complete',
-              body: state.sessionQuote ?? 'Nice work — session finished',
+              body: _liveLine,
             )
           : null,
     );

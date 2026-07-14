@@ -54,6 +54,7 @@ class MainActivity : FlutterActivity() {
                         warningEnabled,
                         ticksEnabled,
                         completionEnabled,
+                        soundPack = call.argument<String>("soundPack") ?: "soft",
                     )
                     result.success(null)
                 }

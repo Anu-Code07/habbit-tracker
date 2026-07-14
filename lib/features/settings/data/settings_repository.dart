@@ -1,5 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:pulse/features/settings/domain/focus_sound_pack.dart';
+
 class SettingsRepository {
   SettingsRepository(this._prefs);
 
@@ -11,6 +13,7 @@ class SettingsRepository {
   static const _completionSoundKey = 'completion_sound_enabled';
   static const _warningSoundKey = 'warning_sound_enabled';
   static const _focusTickSoundKey = 'focus_tick_sound_enabled';
+  static const _soundPackKey = 'focus_sound_pack';
   static const _workMinutesKey = 'work_minutes';
   static const _breakMinutesKey = 'break_minutes';
   static const _userNameKey = 'user_name';
@@ -47,6 +50,12 @@ class SettingsRepository {
   Future<void> setFocusTickSoundEnabled(bool value) =>
       _prefs.setBool(_focusTickSoundKey, value);
 
+  FocusSoundPack get soundPack =>
+      FocusSoundPack.fromStorage(_prefs.getString(_soundPackKey));
+
+  Future<void> setSoundPack(FocusSoundPack pack) =>
+      _prefs.setString(_soundPackKey, pack.storageValue);
+
   int get workMinutes => _prefs.getInt(_workMinutesKey) ?? 25;
 
   Future<void> setWorkMinutes(int value) =>
@@ -73,6 +82,7 @@ class SettingsRepository {
         'completionSoundEnabled': completionSoundEnabled,
         'warningSoundEnabled': warningSoundEnabled,
         'focusTickSoundEnabled': focusTickSoundEnabled,
+        'soundPack': soundPack.storageValue,
         'workMinutes': workMinutes,
         'breakMinutes': breakMinutes,
         'userName': userName,
@@ -98,6 +108,10 @@ class SettingsRepository {
     final tickSound = map['focusTickSoundEnabled'];
     if (tickSound is bool) {
       await setFocusTickSoundEnabled(tickSound);
+    }
+    final pack = map['soundPack'];
+    if (pack is String) {
+      await setSoundPack(FocusSoundPack.fromStorage(pack));
     }
     // Older backups used a single timerSoundsEnabled flag.
     final legacySounds = map['timerSoundsEnabled'];

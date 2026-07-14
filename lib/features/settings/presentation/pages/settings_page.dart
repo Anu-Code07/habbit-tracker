@@ -7,6 +7,7 @@ import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 import 'package:pulse/core/widgets/pulse_glass.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
+import 'package:pulse/features/settings/domain/focus_sound_pack.dart';
 import 'package:pulse/features/settings/presentation/bloc/settings_bloc.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -56,6 +57,7 @@ class SettingsPage extends StatelessWidget {
                   const SizedBox(height: PulseSpacing.xxl),
                   PulseCard(
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
@@ -74,57 +76,90 @@ class SettingsPage extends StatelessWidget {
                                   .read<SettingsBloc>()
                                   .add(SettingsHapticsChanged(v)),
                         ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Completion sound',
-                            style: PulseTypography.bodyMdStrong(),
-                          ),
-                          subtitle: Text(
-                            'Chime when a focus session ends',
-                            style: PulseTypography.bodySm(),
-                          ),
-                          value: state.completionSoundEnabled,
-                          onChanged: state.busy
-                              ? null
-                              : (v) => context
-                                  .read<SettingsBloc>()
-                                  .add(SettingsCompletionSoundChanged(v)),
+                        const SizedBox(height: PulseSpacing.md),
+                        Text(
+                          'Focus sound',
+                          style: PulseTypography.bodyMdStrong(),
                         ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Warning sound',
-                            style: PulseTypography.bodyMdStrong(),
-                          ),
-                          subtitle: Text(
-                            'Alert when 10 seconds remain',
-                            style: PulseTypography.bodySm(),
-                          ),
-                          value: state.warningSoundEnabled,
-                          onChanged: state.busy
-                              ? null
-                              : (v) => context
-                                  .read<SettingsBloc>()
-                                  .add(SettingsWarningSoundChanged(v)),
+                        const SizedBox(height: PulseSpacing.xs),
+                        Text(
+                          state.soundPack.subtitle,
+                          style: PulseTypography.bodySm(),
                         ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(
-                            'Focus ticks',
-                            style: PulseTypography.bodyMdStrong(),
-                          ),
-                          subtitle: Text(
-                            'Soft pluck on each of the last 10 seconds',
-                            style: PulseTypography.bodySm(),
-                          ),
-                          value: state.focusTickSoundEnabled,
-                          onChanged: state.busy
-                              ? null
-                              : (v) => context
-                                  .read<SettingsBloc>()
-                                  .add(SettingsFocusTickSoundChanged(v)),
+                        const SizedBox(height: PulseSpacing.md),
+                        Row(
+                          children: [
+                            for (final pack in FocusSoundPack.values) ...[
+                              if (pack != FocusSoundPack.values.first)
+                                const SizedBox(width: PulseSpacing.sm),
+                              Expanded(
+                                child: _SoundPackChip(
+                                  label: pack.label,
+                                  selected: state.soundPack == pack,
+                                  onTap: state.busy
+                                      ? null
+                                      : () => context.read<SettingsBloc>().add(
+                                            SettingsSoundPackChanged(pack),
+                                          ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
+                        if (state.soundPack.playsAudio) ...[
+                          const SizedBox(height: PulseSpacing.md),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'Completion',
+                              style: PulseTypography.bodyMdStrong(),
+                            ),
+                            subtitle: Text(
+                              'Chime when a session ends',
+                              style: PulseTypography.bodySm(),
+                            ),
+                            value: state.completionSoundEnabled,
+                            onChanged: state.busy
+                                ? null
+                                : (v) => context.read<SettingsBloc>().add(
+                                      SettingsCompletionSoundChanged(v),
+                                    ),
+                          ),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'Warning',
+                              style: PulseTypography.bodyMdStrong(),
+                            ),
+                            subtitle: Text(
+                              'Alert when 10 seconds remain',
+                              style: PulseTypography.bodySm(),
+                            ),
+                            value: state.warningSoundEnabled,
+                            onChanged: state.busy
+                                ? null
+                                : (v) => context.read<SettingsBloc>().add(
+                                      SettingsWarningSoundChanged(v),
+                                    ),
+                          ),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              'Focus ticks',
+                              style: PulseTypography.bodyMdStrong(),
+                            ),
+                            subtitle: Text(
+                              'Soft pluck on the last seconds',
+                              style: PulseTypography.bodySm(),
+                            ),
+                            value: state.focusTickSoundEnabled,
+                            onChanged: state.busy
+                                ? null
+                                : (v) => context.read<SettingsBloc>().add(
+                                      SettingsFocusTickSoundChanged(v),
+                                    ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -268,6 +303,33 @@ class SettingsPage extends StatelessWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SoundPackChip extends StatelessWidget {
+  const _SoundPackChip({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return PulseGlass(
+      tint: selected ? PulseColors.primary : PulseColors.canvas,
+      opacity: selected ? 0.8 : 0.45,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: PulseTypography.bodySmStrong(),
       ),
     );
   }

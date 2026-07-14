@@ -40,6 +40,7 @@ abstract final class FocusBackgroundAlerts {
     bool warningEnabled = true,
     bool ticksEnabled = true,
     bool completionEnabled = true,
+    String soundPack = 'soft',
   }) async {
     if (kIsWeb) return;
     if (!(Platform.isIOS || Platform.isAndroid)) return;
@@ -52,6 +53,7 @@ abstract final class FocusBackgroundAlerts {
         'warningEnabled': warningEnabled,
         'ticksEnabled': ticksEnabled,
         'completionEnabled': completionEnabled,
+        'soundPack': soundPack,
       });
     } catch (error, stack) {
       debugPrint('FocusBackgroundAlerts schedule failed: $error\n$stack');
