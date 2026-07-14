@@ -17,7 +17,21 @@ class FlutterAlertConfig {
   }
 
   func getAlertConfig() -> AlertConfiguration {
-      return AlertConfiguration(title: LocalizedStringResource(stringLiteral: _title), body: LocalizedStringResource(stringLiteral: _body), sound: (_sound == nil) ? .default : AlertConfiguration.AlertSound.named(_sound!));
+    // Dart often sends sound: "default". Named("default") looks for a missing
+    // bundle file and plays nothing — map that to AlertSound.default.
+    let alertSound: AlertConfiguration.AlertSound
+    if let sound = _sound?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !sound.isEmpty,
+       sound.lowercased() != "default" {
+      alertSound = .named(sound)
+    } else {
+      alertSound = .default
+    }
+    return AlertConfiguration(
+      title: LocalizedStringResource(stringLiteral: _title),
+      body: LocalizedStringResource(stringLiteral: _body),
+      sound: alertSound
+    )
   }
 }
 

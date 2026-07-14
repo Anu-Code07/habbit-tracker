@@ -6,21 +6,24 @@ abstract final class FocusTimerSounds {
   static final AudioPlayer _player = AudioPlayer();
   static bool _configured = false;
 
-  static AudioContext get _alarmContext => AudioContext(
+  /// Prefer notification/sonification routing — `alarm` is silent on many OEMs
+  /// unless the app is treated as an alarm clock.
+  static AudioContext get _chimeContext => AudioContext(
         iOS: AudioContextIOS(
-          // playback ignores the Ring/Silent switch; speaker so it isn't
-          // routed quietly to the earpiece.
+          // playback ignores the Ring/Silent switch; duckOthers keeps it audible
+          // without killing background music permanently.
           category: AVAudioSessionCategory.playback,
           options: const {
             AVAudioSessionOptions.defaultToSpeaker,
             AVAudioSessionOptions.duckOthers,
+            AVAudioSessionOptions.mixWithOthers,
           },
         ),
         android: const AudioContextAndroid(
           isSpeakerphoneOn: true,
           stayAwake: false,
           contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.alarm,
+          usageType: AndroidUsageType.notification,
           audioFocus: AndroidAudioFocus.gainTransientMayDuck,
         ),
       );
@@ -32,9 +35,10 @@ abstract final class FocusTimerSounds {
   static Future<void> _ensureConfigured() async {
     if (_configured) return;
     try {
-      await AudioPlayer.global.setAudioContext(_alarmContext);
-      await _player.setAudioContext(_alarmContext);
-      await _player.setPlayerMode(PlayerMode.lowLatency);
+      await AudioPlayer.global.setAudioContext(_chimeContext);
+      await _player.setAudioContext(_chimeContext);
+      // mediaPlayer is reliable for short WAV assets; lowLatency skips some.
+      await _player.setPlayerMode(PlayerMode.mediaPlayer);
       await _player.setReleaseMode(ReleaseMode.stop);
       await _player.setVolume(1);
       _configured = true;
@@ -50,10 +54,15 @@ abstract final class FocusTimerSounds {
     try {
       await _ensureConfigured();
       // Re-assert context in case another plugin changed the session.
-      await _player.setAudioContext(_alarmContext);
+      await _player.setAudioContext(_chimeContext);
       await _player.stop();
-      await _player.setVolume(1);
-      await _player.play(AssetSource(assetPath));
+      await _player.setVolume(1.0);
+      // AssetSource paths are relative to the Flutter assets/ root.
+      await _player.play(
+        AssetSource(assetPath),
+        ctx: _chimeContext,
+        volume: 1.0,
+      );
       if (waitUntilDone) {
         await _player.onPlayerComplete.first.timeout(
           const Duration(seconds: 3),

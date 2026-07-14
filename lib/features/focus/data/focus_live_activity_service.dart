@@ -89,6 +89,9 @@ class FocusLiveActivityService {
     required int totalSeconds,
     required bool isPaused,
     DateTime? endsAt,
+    bool alertSound = false,
+    String? alertTitle,
+    String? alertBody,
   }) {
     final safeRemaining = remainingSeconds.clamp(0, totalSeconds);
     final m = safeRemaining ~/ 60;
@@ -114,6 +117,11 @@ class FocusLiveActivityService {
       'progress': progress,
       'status': isPaused ? 'paused' : 'running',
       'endAtMs': endAt,
+      // Android Live Activity updates ignore AlertConfig; flag the payload so
+      // CustomLiveActivityManager can use a sounding notification channel.
+      'alertSound': alertSound,
+      if (alertTitle != null) 'alertTitle': alertTitle,
+      if (alertBody != null) 'alertBody': alertBody,
     };
   }
 
@@ -260,6 +268,9 @@ class FocusLiveActivityService {
       totalSeconds: totalSeconds,
       isPaused: isPaused,
       endsAt: endsAt,
+      alertSound: alert != null,
+      alertTitle: alert?.title,
+      alertBody: alert?.body,
     );
 
     try {
@@ -301,6 +312,9 @@ class FocusLiveActivityService {
               totalSeconds: 1,
               isPaused: false,
               endsAt: DateTime.now(),
+              alertSound: true,
+              alertTitle: completionAlert.title,
+              alertBody: completionAlert.body,
             ),
             completionAlert,
           );

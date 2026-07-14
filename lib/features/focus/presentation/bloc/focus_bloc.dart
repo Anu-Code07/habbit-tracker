@@ -400,7 +400,6 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         islandAlert = AlertConfig(
           title: 'Almost done',
           body: '10 seconds left',
-          sound: 'default',
         );
         await FocusTimerSounds.warningAlert();
       }
@@ -449,7 +448,6 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
           ? AlertConfig(
               title: 'Focus complete',
               body: state.sessionQuote ?? 'Nice work — session finished',
-              sound: 'default',
             )
           : null,
     );
