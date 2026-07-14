@@ -178,7 +178,13 @@ private struct RemainingText: View {
       Text(PulseLiveContent.fallbackRemaining(context: context, sharedDefault: sharedDefault))
     } else if let end = PulseLiveContent.endDate(context: context, sharedDefault: sharedDefault),
               end > Date() {
-      Text(timerInterval: Date()...end, countsDown: true)
+      // Stable closed range from segment start → end so rebuilds never invent a
+      // new deadline (Date()...end would still count down, but startAtMs keeps
+      // the interval identical to the app's wall-clock segment).
+      let start = PulseLiveContent.startDate(context: context, sharedDefault: sharedDefault)
+        ?? end.addingTimeInterval(-max(end.timeIntervalSinceNow, 1))
+      let intervalStart = min(start, end.addingTimeInterval(-1))
+      Text(timerInterval: intervalStart...end, countsDown: true)
         .monospacedDigit()
         .multilineTextAlignment(.trailing)
     } else {
@@ -264,6 +270,16 @@ private enum PulseLiveContent {
   ) -> Date? {
     guard let endAtMs = number(context, sharedDefault, "endAtMs"), endAtMs > 0 else { return nil }
     return Date(timeIntervalSince1970: endAtMs / 1000.0)
+  }
+
+  static func startDate(
+    context: ActivityViewContext<LiveActivitiesAppAttributes>,
+    sharedDefault: UserDefaults?
+  ) -> Date? {
+    guard let startAtMs = number(context, sharedDefault, "startAtMs"), startAtMs > 0 else {
+      return nil
+    }
+    return Date(timeIntervalSince1970: startAtMs / 1000.0)
   }
 
   static func title(

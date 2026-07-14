@@ -175,6 +175,8 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
 
   /// Shared wall-clock deadline for the in-app timer and Live Activity.
   DateTime? _segmentEndsAt;
+  /// Leftover milliseconds when paused — preserves sub-second accuracy on resume.
+  int? _pausedRemainingMs;
   int _lastAnnouncedSecond = -1;
 
   void _onLiveAction(FocusLiveAction action) {
@@ -194,13 +196,20 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     }
   }
 
-  int _remainingFromDeadline() {
+  int _remainingMsFromDeadline() {
     final endsAt = _segmentEndsAt;
-    if (endsAt == null) return state.remainingSeconds;
-    final ms =
-        endsAt.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+    if (endsAt != null) {
+      final ms =
+          endsAt.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+      return ms <= 0 ? 0 : ms;
+    }
+    return _pausedRemainingMs ?? (state.remainingSeconds * 1000);
+  }
+
+  int _remainingFromDeadline() {
+    final ms = _remainingMsFromDeadline();
     if (ms <= 0) return 0;
-    // Floor to whole seconds — matches Live Activity timerInterval display.
+    // Floor to whole seconds — matches Chronometer / timerInterval display.
     return ms ~/ 1000;
   }
 
@@ -241,6 +250,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   Future<void> _onMode(FocusModeChanged event, Emitter<FocusState> emit) async {
     _timer?.cancel();
     _segmentEndsAt = null;
+    _pausedRemainingMs = null;
     _didWarnTenSeconds = false;
     _lastAnnouncedSecond = -1;
     await _liveActivity.end();
@@ -291,8 +301,12 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _lastAnnouncedSecond = -1;
     final quote = PulseFocusQuotes.next();
     final remaining = state.remainingSeconds;
-    final endsAt = DateTime.now().add(Duration(seconds: remaining));
+    // Align to whole seconds so app + LA both start on the same boundary.
+    final endsAt = DateTime.fromMillisecondsSinceEpoch(
+      DateTime.now().millisecondsSinceEpoch + remaining * 1000,
+    );
     _segmentEndsAt = endsAt;
+    _pausedRemainingMs = null;
     emit(
       state.copyWith(
         isRunning: true,
@@ -329,7 +343,10 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     Emitter<FocusState> emit,
   ) async {
     _timer?.cancel();
-    final remaining = _remainingFromDeadline().clamp(0, state.totalSeconds);
+    final remainingMs = _remainingMsFromDeadline();
+    final remaining =
+        (remainingMs ~/ 1000).clamp(0, state.totalSeconds);
+    _pausedRemainingMs = remainingMs;
     _segmentEndsAt = null;
     emit(state.copyWith(isRunning: false, remainingSeconds: remaining));
     await FocusBackgroundAlerts.cancel();
@@ -345,9 +362,15 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     FocusTimerResumed event,
     Emitter<FocusState> emit,
   ) async {
-    final remaining = state.remainingSeconds.clamp(0, state.totalSeconds);
-    final endsAt = DateTime.now().add(Duration(seconds: remaining));
+    final remainingMs = (_pausedRemainingMs ??
+            state.remainingSeconds * 1000)
+        .clamp(0, state.totalSeconds * 1000);
+    final remaining = (remainingMs ~/ 1000).clamp(0, state.totalSeconds);
+    final endsAt = DateTime.fromMillisecondsSinceEpoch(
+      DateTime.now().millisecondsSinceEpoch + remainingMs,
+    );
     _segmentEndsAt = endsAt;
+    _pausedRemainingMs = null;
     _lastAnnouncedSecond = -1;
     emit(state.copyWith(isRunning: true, remainingSeconds: remaining));
     await _liveActivity.update(
@@ -375,6 +398,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   ) async {
     _timer?.cancel();
     _segmentEndsAt = null;
+    _pausedRemainingMs = null;
     _didWarnTenSeconds = false;
     _lastAnnouncedSecond = -1;
     await FocusBackgroundAlerts.cancel();
@@ -397,6 +421,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     if (remaining <= 0) {
       _timer?.cancel();
       _segmentEndsAt = null;
+      _pausedRemainingMs = null;
       add(const FocusTimerFinished());
       return;
     }
@@ -443,17 +468,17 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       }
     }
 
-    // iOS counts down via Dynamic Island timerInterval (stable endAt).
-    // Android notification text is static unless we refresh each second.
-    final pushAndroidTick = !kIsWeb && Platform.isAndroid;
-    if (shouldPushLiveActivity || pushAndroidTick) {
+    // iOS + Android both count down from a stable endAtMs (timerInterval /
+    // Chronometer). Only push an LA update for alerts / warning polish —
+    // not every second (that was resetting Android's clock).
+    if (shouldPushLiveActivity) {
       await _liveActivity.update(
         quote: state.sessionQuote ?? 'Stay with it',
         remainingSeconds: remaining,
         totalSeconds: state.totalSeconds,
         isPaused: false,
         endsAt: _segmentEndsAt,
-        alert: shouldPushLiveActivity ? islandAlert : null,
+        alert: islandAlert,
       );
     }
   }
@@ -464,6 +489,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   ) async {
     _timer?.cancel();
     _segmentEndsAt = null;
+    _pausedRemainingMs = null;
     _lastAnnouncedSecond = -1;
     await FocusBackgroundAlerts.cancel();
     if (_settings.completionSoundEnabled) {

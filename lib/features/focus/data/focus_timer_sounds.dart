@@ -106,11 +106,8 @@ abstract final class FocusTimerSounds {
   static Future<void> completed() async {
     await _play(
       'sounds/focus_complete.wav',
-      volume: 1.0,
+      volume: 0.72,
       waitUntilDone: true,
     );
-    try {
-      await SystemSound.play(SystemSoundType.alert);
-    } catch (_) {}
   }
 }

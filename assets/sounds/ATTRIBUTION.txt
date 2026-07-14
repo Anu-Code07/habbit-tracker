@@ -1,2 +1,6 @@
-Kenney Interface Sounds (CC0) — https://kenney.nl/assets/interface-sounds
-Via https://github.com/Calinou/kenney-interface-sounds
+focus_tick.wav / focus_warning.wav
+  Kenney Interface Sounds (CC0) — https://kenney.nl/assets/interface-sounds
+  Via https://github.com/Calinou/kenney-interface-sounds
+
+focus_complete.wav
+  Soft major-chord chime generated for Pulse (original, CC0).

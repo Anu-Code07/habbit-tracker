@@ -13,6 +13,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.widget.RemoteViews
 import com.example.live_activities.LiveActivityManager
 
@@ -63,6 +64,10 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         appContext.packageName,
         R.layout.live_activity,
     )
+
+    /** Avoid re-arming AlarmManager on every notification refresh. */
+    private var lastScheduledEndAtMs: Long = -1L
+    private var lastScheduledPaused: Boolean = true
 
     init {
         ensureChannels()
@@ -178,10 +183,13 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         for (sec in 1..9) {
             alarm.cancel(alarmPendingIntent(ACTION_TICK, REQ_TICK_BASE + sec, ""))
         }
+        lastScheduledEndAtMs = -1L
+        lastScheduledPaused = true
     }
 
     /**
      * Prefer wall-clock [endAtMs] so Doze/background doesn't drift elapsed timers.
+     * Idempotent for the same deadline — safe to call from Flutter and notification builds.
      */
     fun scheduleAlerts(
         remainingSeconds: Long,
@@ -191,16 +199,30 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         warningEnabled: Boolean = true,
         ticksEnabled: Boolean = true,
         completionEnabled: Boolean = true,
+        force: Boolean = false,
     ) {
-        cancelAlerts()
-        if (paused || remainingSeconds <= 0L) return
+        if (paused || remainingSeconds <= 0L) {
+            cancelAlerts()
+            return
+        }
 
-        val alarm = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val nowWall = System.currentTimeMillis()
         val endWall = when {
             endAtMs != null && endAtMs > nowWall -> endAtMs
             else -> nowWall + remainingSeconds * 1000L
         }
+        if (!force &&
+            !lastScheduledPaused &&
+            lastScheduledEndAtMs == endWall
+        ) {
+            return
+        }
+
+        cancelAlerts()
+        lastScheduledEndAtMs = endWall
+        lastScheduledPaused = false
+
+        val alarm = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         fun setExact(triggerAtMs: Long, action: String, requestCode: Int) {
             if (triggerAtMs <= nowWall + 250L) return
@@ -283,8 +305,13 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         val remainingSeconds = longOf(data, "remainingSeconds")?.coerceAtLeast(0L) ?: 0L
         val endAtMs = longOf(data, "endAtMs")
         val paused = status == "paused"
+        val nowWall = System.currentTimeMillis()
         val dark = isSystemDark()
-        val remainingLabel = formatRemaining(remainingSeconds)
+        val remainingLabel = when {
+            endAtMs != null && endAtMs > nowWall && !paused ->
+                formatRemaining((endAtMs - nowWall) / 1000L)
+            else -> formatRemaining(remainingSeconds)
+        }
 
         val titleColor = if (dark) Color.parseColor("#F2F4F0") else Color.parseColor("#0E0F0C")
         val subtitleColor = if (dark) Color.parseColor("#B4B8B0") else Color.parseColor("#5C605A")
@@ -295,16 +322,37 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         remoteViews.setTextViewText(
             R.id.live_status,
             when {
-                remainingSeconds <= 0L -> "Complete"
+                remainingSeconds <= 0L || (endAtMs != null && endAtMs <= nowWall && !paused) ->
+                    "Complete"
                 paused -> "Paused"
                 else -> "Focusing"
             },
         )
-        remoteViews.setTextViewText(R.id.live_remaining, remainingLabel)
         remoteViews.setTextColor(R.id.live_title, titleColor)
         remoteViews.setTextColor(R.id.live_subtitle, subtitleColor)
         remoteViews.setTextColor(R.id.live_status, statusColor)
         remoteViews.setTextColor(R.id.live_remaining, titleColor)
+
+        // OS Chronometer from wall-clock deadline — stays aligned without Flutter ticks.
+        val runningCountdown = !paused &&
+            endAtMs != null &&
+            endAtMs > nowWall &&
+            remainingSeconds > 0L
+        if (runningCountdown) {
+            val remainingMs = (endAtMs!! - nowWall).coerceAtLeast(0L)
+            val base = SystemClock.elapsedRealtime() + remainingMs
+            remoteViews.setChronometerCountDown(R.id.live_remaining, true)
+            remoteViews.setChronometer(R.id.live_remaining, base, null, true)
+        } else {
+            remoteViews.setChronometerCountDown(R.id.live_remaining, true)
+            remoteViews.setChronometer(
+                R.id.live_remaining,
+                SystemClock.elapsedRealtime(),
+                null,
+                false,
+            )
+            remoteViews.setTextViewText(R.id.live_remaining, remainingLabel)
+        }
 
         remoteViews.setTextViewText(
             R.id.live_btn_primary,
@@ -321,8 +369,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
             R.id.live_btn_finish,
             actionPendingIntent(ACTION_FINISH, REQ_FINISH),
         )
-
-        scheduleAlerts(remainingSeconds, paused, subtitle, endAtMs)
+        // Alerts are scheduled only from Flutter MethodChannel (with sound settings).
     }
 
     private fun wantsAlertSound(data: Map<String, Any>): Boolean {

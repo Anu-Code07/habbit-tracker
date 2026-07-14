@@ -26,6 +26,10 @@ class FocusLiveActivityService {
   /// ActivityKit system id — required by [LiveActivities.updateActivity].
   String? _systemActivityId;
 
+  /// Wall-clock segment bounds for a stable Live Activity timerInterval.
+  int? _segmentStartAtMs;
+  int? _segmentEndAtMs;
+
   /// Buffered until FocusBloc (or another listener) subscribes.
   FocusLiveAction? _pendingAction;
 
@@ -128,20 +132,6 @@ class FocusLiveActivityService {
     }
   }
 
-  Future<void> _syncBackgroundAlerts({
-    required String quote,
-    required int remainingSeconds,
-    required bool isPaused,
-    DateTime? endsAt,
-  }) {
-    return FocusBackgroundAlerts.schedule(
-      remainingSeconds: remainingSeconds,
-      endsAt: endsAt,
-      quote: quote,
-      paused: isPaused,
-    );
-  }
-
   Map<String, dynamic> _payload({
     required String quote,
     required int remainingSeconds,
@@ -159,12 +149,12 @@ class FocusLiveActivityService {
         '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
     final progress =
         totalSeconds == 0 ? 0.0 : 1 - (safeRemaining / totalSeconds);
-    // Prefer a stable wall-clock deadline so Live Activity and the app stay aligned.
-    final endAt = isPaused
-        ? 0
-        : (endsAt ??
-                DateTime.now().add(Duration(seconds: safeRemaining)))
-            .millisecondsSinceEpoch;
+    // Only use the segment deadline from FocusBloc — never invent a new
+    // wall-clock end from remainingSeconds (that desyncs island / notification).
+    final endAtMs = isPaused ? 0 : (endsAt?.millisecondsSinceEpoch ?? 0);
+    final startAtMs = (!isPaused && endAtMs > 0)
+        ? (_segmentStartAtMs ?? (endAtMs - safeRemaining * 1000))
+        : 0;
 
     return <String, dynamic>{
       'title': 'Pulse Focus',
@@ -175,7 +165,8 @@ class FocusLiveActivityService {
       'totalSeconds': totalSeconds,
       'progress': progress,
       'status': isPaused ? 'paused' : 'running',
-      'endAtMs': endAt,
+      'endAtMs': endAtMs,
+      'startAtMs': startAtMs,
       // Android Live Activity updates ignore AlertConfig; flag the payload so
       // CustomLiveActivityManager can use a sounding notification channel.
       'alertSound': alertSound,
@@ -212,6 +203,8 @@ class FocusLiveActivityService {
     }
     _systemActivityId = null;
     _active = false;
+    _segmentStartAtMs = null;
+    _segmentEndAtMs = null;
   }
 
   /// Starts (or restarts) the focus Live Activity so Dynamic Island shows
@@ -242,6 +235,10 @@ class FocusLiveActivityService {
 
     await _clearExisting();
 
+    _segmentStartAtMs =
+        endsAt.millisecondsSinceEpoch - remainingSeconds * 1000;
+    _segmentEndAtMs = endsAt.millisecondsSinceEpoch;
+
     final data = _payload(
       quote: quote,
       remainingSeconds: remainingSeconds,
@@ -268,13 +265,6 @@ class FocusLiveActivityService {
       _active = true;
       debugPrint(
         'FocusLiveActivity started on Dynamic Island id=$_systemActivityId',
-      );
-
-      await _syncBackgroundAlerts(
-        quote: quote,
-        remainingSeconds: remainingSeconds,
-        isPaused: false,
-        endsAt: endsAt,
       );
 
       // Brief island presentation so the timer is obvious at session start.
@@ -328,6 +318,19 @@ class FocusLiveActivityService {
   }) async {
     if (!_active) return;
 
+    if (!isPaused && endsAt != null) {
+      final endMs = endsAt.millisecondsSinceEpoch;
+      // New wall-clock segment only when the deadline changes (start / resume).
+      if (_segmentEndAtMs != endMs) {
+        final leftMs = endMs - DateTime.now().millisecondsSinceEpoch;
+        _segmentEndAtMs = endMs;
+        _segmentStartAtMs =
+            endMs - (leftMs > 0 ? leftMs : remainingSeconds * 1000);
+      }
+    } else if (isPaused) {
+      _segmentEndAtMs = null;
+    }
+
     final data = _payload(
       quote: quote,
       remainingSeconds: remainingSeconds,
@@ -357,12 +360,7 @@ class FocusLiveActivityService {
           await _plugin.updateActivity(resolved, data, alert);
         }
       }
-      await _syncBackgroundAlerts(
-        quote: quote,
-        remainingSeconds: remainingSeconds,
-        isPaused: isPaused,
-        endsAt: endsAt,
-      );
+      // Background alerts are scheduled by FocusBloc with user sound settings.
     } catch (error) {
       debugPrint('FocusLiveActivity update failed: $error');
     }
@@ -407,6 +405,8 @@ class FocusLiveActivityService {
 
     _active = false;
     _systemActivityId = null;
+    _segmentStartAtMs = null;
+    _segmentEndAtMs = null;
   }
 
   Future<void> dispose() async {

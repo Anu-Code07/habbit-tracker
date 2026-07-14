@@ -47,12 +47,14 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- Plain text only — Chronometer counted past 0 into negative times. -->
-        <TextView
+        <!-- Counts down from endAtMs via setChronometerCountDown — stays in sync
+             even when Flutter is suspended. Frozen Text when paused / complete. -->
+        <Chronometer
             android:id="@+id/live_remaining"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
+            android:format="%s"
             android:text="25:00"
             android:textColor="@color/pulse_live_timer"
             android:textSize="26sp"
