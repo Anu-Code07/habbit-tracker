@@ -7,6 +7,7 @@ import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 import 'package:pulse/core/widgets/pulse_glass.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
+import 'package:pulse/features/focus/data/focus_timer_sounds.dart';
 import 'package:pulse/features/settings/domain/focus_sound_pack.dart';
 import 'package:pulse/features/settings/presentation/bloc/settings_bloc.dart';
 
@@ -98,9 +99,16 @@ class SettingsPage extends StatelessWidget {
                                   selected: state.soundPack == pack,
                                   onTap: state.busy
                                       ? null
-                                      : () => context.read<SettingsBloc>().add(
-                                            SettingsSoundPackChanged(pack),
-                                          ),
+                                      : () async {
+                                          context.read<SettingsBloc>().add(
+                                                SettingsSoundPackChanged(pack),
+                                              );
+                                          if (pack.playsAudio) {
+                                            await FocusTimerSounds.completed(
+                                              pack,
+                                            );
+                                          }
+                                        },
                                 ),
                               ),
                             ],

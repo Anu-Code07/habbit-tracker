@@ -10,6 +10,7 @@ import 'package:pulse/features/focus/data/repositories/focus_repository_impl.dar
 import 'package:pulse/features/focus/domain/repositories/focus_repository.dart';
 import 'package:pulse/features/focus/domain/usecases/focus_usecases.dart';
 import 'package:pulse/features/habits/data/datasources/habit_local_datasource.dart';
+import 'package:pulse/features/habits/data/grace_day_store.dart';
 import 'package:pulse/features/habits/data/repositories/habit_repository_impl.dart';
 import 'package:pulse/features/habits/domain/repositories/habit_repository.dart';
 import 'package:pulse/features/habits/domain/usecases/habit_usecases.dart';
@@ -29,8 +30,11 @@ Future<void> configureDependencies() async {
       () => PulseBackupService(database: sl(), settings: sl()),
     )
     ..registerLazySingleton(() => HabitLocalDataSource(sl()))
+    ..registerLazySingleton(() => GraceDayStore(sl()))
     ..registerLazySingleton(() => FocusLocalDataSource(sl()))
-    ..registerLazySingleton<HabitRepository>(() => HabitRepositoryImpl(sl()))
+    ..registerLazySingleton<HabitRepository>(
+      () => HabitRepositoryImpl(sl(), sl()),
+    )
     ..registerLazySingleton<FocusRepository>(() => FocusRepositoryImpl(sl()))
     ..registerLazySingleton(() => GetTodayHabits(sl()))
     ..registerLazySingleton(() => ToggleHabitCheckIn(sl()))

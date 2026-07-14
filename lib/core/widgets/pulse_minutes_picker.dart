@@ -6,9 +6,10 @@ import 'package:pulse/core/theme/pulse_radii.dart';
 import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 
-/// Shared Pomodoro minute options for Focus + Settings.
+/// Shared Pomodoro length options for Focus + Settings.
 abstract final class PulsePomodoroMinutes {
-  static const options = <int>[15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
+  /// Values are minutes. `1` = 60-second sprint.
+  static const options = <int>[1, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60];
 
   static int nearest(int minutes) {
     var best = options.first;
@@ -21,6 +22,11 @@ abstract final class PulsePomodoroMinutes {
       }
     }
     return best;
+  }
+
+  static String label(int minutes) {
+    if (minutes == 1) return '60 sec';
+    return '$minutes min';
   }
 }
 
@@ -100,7 +106,7 @@ Future<int?> showPulseMinutesPicker(
                     for (final minutes in PulsePomodoroMinutes.options)
                       Center(
                         child: Text(
-                          '$minutes min',
+                          PulsePomodoroMinutes.label(minutes),
                           style: PulseTypography.displayXs(),
                         ),
                       ),

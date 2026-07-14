@@ -9,6 +9,7 @@ import 'package:pulse/core/widgets/pulse_glass.dart';
 import 'package:pulse/core/widgets/pulse_shimmer.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
 import 'package:pulse/features/insights/presentation/bloc/insights_bloc.dart';
+import 'package:pulse/features/insights/presentation/widgets/pulse_week_share.dart';
 
 class InsightsPage extends StatelessWidget {
   const InsightsPage({super.key});
@@ -44,6 +45,31 @@ class InsightsPage extends StatelessWidget {
                     Text(
                       'A quiet look at your rhythm.',
                       style: PulseTypography.bodyMd(),
+                    ),
+                    const SizedBox(height: PulseSpacing.lg),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: PulseGlass(
+                        tint: PulseColors.primaryPale,
+                        opacity: 0.75,
+                        blur: 12,
+                        borderRadius: BorderRadius.circular(PulseRadii.pill),
+                        onTap: () => PulseWeekShare.share(
+                          context: context,
+                          completionPercent:
+                              (weekStats.completionRate * 100).round(),
+                          checkIns: weekStats.completedCount,
+                          focusMinutes: focusMinutes,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PulseSpacing.lg,
+                          vertical: PulseSpacing.md,
+                        ),
+                        child: Text(
+                          'Share this week',
+                          style: PulseTypography.bodySmStrong(),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: PulseSpacing.xxl),
                     PulseCard(

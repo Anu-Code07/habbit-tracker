@@ -127,6 +127,8 @@ class AppShell extends StatelessWidget {
             settingsRepository: sl<SettingsRepository>(),
             homeWidgetSync: sl<PulseHomeWidgetSync>(),
             dedupeHabits: sl<DedupeHabits>(),
+            getTodayFocusMinutes: sl<GetTodayFocusMinutes>(),
+            graceDayStore: sl(),
           )..add(const TodayStarted()),
         ),
         BlocProvider(

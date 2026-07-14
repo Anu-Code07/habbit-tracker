@@ -23,7 +23,31 @@ class TodayPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<TodayBloc, TodayState>(
+    return BlocConsumer<TodayBloc, TodayState>(
+      listenWhen: (p, c) {
+        final prevMsg = switch (p) {
+          TodaySuccess(:final message) => message,
+          TodayEmpty(:final message) => message,
+          _ => null,
+        };
+        final nextMsg = switch (c) {
+          TodaySuccess(:final message) => message,
+          TodayEmpty(:final message) => message,
+          _ => null,
+        };
+        return nextMsg != null && nextMsg != prevMsg;
+      },
+      listener: (context, state) {
+        final message = switch (state) {
+          TodaySuccess(:final message) => message,
+          TodayEmpty(:final message) => message,
+          _ => null,
+        };
+        if (message == null) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      },
       builder: (context, state) {
         return Scaffold(
           backgroundColor: Colors.transparent,
@@ -40,6 +64,8 @@ class TodayPage extends StatelessWidget {
                   :final selectedDate,
                   :final greeting,
                   :final isRefreshing,
+                  :final graceAvailable,
+                  :final isGraceDay,
                 ) =>
                   _TodayBody(
                     selectedDate: selectedDate,
@@ -47,12 +73,16 @@ class TodayPage extends StatelessWidget {
                     greeting: greeting,
                     empty: true,
                     isRefreshing: isRefreshing,
+                    graceAvailable: graceAvailable,
+                    isGraceDay: isGraceDay,
                   ),
                 TodaySuccess(
                   :final habits,
                   :final selectedDate,
                   :final greeting,
                   :final isRefreshing,
+                  :final graceAvailable,
+                  :final isGraceDay,
                 ) =>
                   _TodayBody(
                     selectedDate: selectedDate,
@@ -60,6 +90,8 @@ class TodayPage extends StatelessWidget {
                     greeting: greeting,
                     empty: false,
                     isRefreshing: isRefreshing,
+                    graceAvailable: graceAvailable,
+                    isGraceDay: isGraceDay,
                   ),
               },
             ),
@@ -77,6 +109,8 @@ class _TodayBody extends StatefulWidget {
     required this.greeting,
     required this.empty,
     this.isRefreshing = false,
+    this.graceAvailable = true,
+    this.isGraceDay = false,
   });
 
   final DateTime selectedDate;
@@ -84,6 +118,8 @@ class _TodayBody extends StatefulWidget {
   final String greeting;
   final bool empty;
   final bool isRefreshing;
+  final bool graceAvailable;
+  final bool isGraceDay;
 
   @override
   State<_TodayBody> createState() => _TodayBodyState();
@@ -180,6 +216,67 @@ class _TodayBodyState extends State<_TodayBody> {
             ),
           ),
         ),
+        if (widget.isGraceDay || widget.graceAvailable)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                PulseSpacing.xl,
+                0,
+                PulseSpacing.xl,
+                PulseSpacing.md,
+              ),
+              child: PulseGlass(
+                tint: widget.isGraceDay
+                    ? PulseColors.primaryPale
+                    : PulseColors.canvas,
+                opacity: 0.72,
+                blur: 14,
+                borderRadius: BorderRadius.circular(PulseRadii.lg),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PulseSpacing.lg,
+                  vertical: PulseSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.isGraceDay
+                                ? 'Grace day'
+                                : 'One grace day this week',
+                            style: PulseTypography.bodyMdStrong(),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.isGraceDay
+                                ? 'Streak protected for this date'
+                                : 'Protect your streak if today can’t happen',
+                            style: PulseTypography.bodySm(),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!widget.isGraceDay && widget.graceAvailable)
+                      TextButton(
+                        onPressed: widget.isRefreshing
+                            ? null
+                            : () => context
+                                .read<TodayBloc>()
+                                .add(const TodayGraceDayRequested()),
+                        child: Text(
+                          'Use grace',
+                          style: PulseTypography.bodySmStrong(
+                            color: PulseColors.ink,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: PulseSpacing.xl),

@@ -4,12 +4,22 @@ abstract final class PulseGreetings {
   static String? _last;
 
   /// Short, natural greetings. Avoids repeating the last one.
-  static String forUser(String rawName) {
+  /// [hasFocusedToday] softens the tone when you've already sat a block.
+  static String forUser(
+    String rawName, {
+    bool hasFocusedToday = false,
+  }) {
     final name = rawName.trim();
     final hour = DateTime.now().hour;
     final pool = name.isEmpty
-        ? _anonymous(hour)
-        : _named(hour, _firstName(name));
+        ? [
+            ..._anonymous(hour),
+            if (hasFocusedToday) ..._anonymousFocusDone(hour),
+          ]
+        : [
+            ..._named(hour, _firstName(name)),
+            if (hasFocusedToday) ..._namedFocusDone(hour, _firstName(name)),
+          ];
 
     if (pool.length == 1) {
       _last = pool.first;
@@ -29,6 +39,50 @@ abstract final class PulseGreetings {
     final first = parts.first;
     if (first.isEmpty) return name;
     return first[0].toUpperCase() + first.substring(1);
+  }
+
+  static List<String> _namedFocusDone(int hour, String name) {
+    if (hour < 12) {
+      return [
+        'Focus already rolling, $name',
+        'Nice block earlier, $name',
+        'You started strong, $name',
+      ];
+    }
+    if (hour < 17) {
+      return [
+        'Deep work already logged, $name',
+        'That focus time shows, $name',
+        'You’ve protected attention today, $name',
+      ];
+    }
+    return [
+      'You gave today a real block, $name',
+      'Focus is done — ease out, $name',
+      'That session counted, $name',
+    ];
+  }
+
+  static List<String> _anonymousFocusDone(int hour) {
+    if (hour < 12) {
+      return const [
+        'Focus already rolling',
+        'Nice block earlier',
+        'You started strong',
+      ];
+    }
+    if (hour < 17) {
+      return const [
+        'Deep work already logged',
+        'That focus time shows',
+        'You’ve protected attention today',
+      ];
+    }
+    return const [
+      'You gave today a real block',
+      'Focus is done — ease out',
+      'That session counted',
+    ];
   }
 
   static List<String> _named(int hour, String name) {

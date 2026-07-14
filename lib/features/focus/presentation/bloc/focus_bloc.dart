@@ -202,6 +202,11 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
 
   String get _liveLine => state.sessionHeadline;
 
+  String get _islandTitle {
+    final title = state.sessionTitle.trim();
+    return title.isEmpty ? 'Pulse' : title;
+  }
+
   bool get _warningOn =>
       _settings.soundPack.playsAudio && _settings.warningSoundEnabled;
 
@@ -361,6 +366,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     await FocusTimerSounds.warmUp(_settings.soundPack);
     await _liveActivity.start(
       quote: liveLine,
+      title: _islandTitle,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       endsAt: endsAt,
@@ -392,6 +398,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     await FocusBackgroundAlerts.cancel();
     await _liveActivity.update(
       quote: _liveLine,
+      title: _islandTitle,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: true,
@@ -415,6 +422,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     emit(state.copyWith(isRunning: true, remainingSeconds: remaining));
     await _liveActivity.update(
       quote: _liveLine,
+      title: _islandTitle,
       remainingSeconds: remaining,
       totalSeconds: state.totalSeconds,
       isPaused: false,
@@ -509,6 +517,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     if (shouldPushLiveActivity) {
       await _liveActivity.update(
         quote: _liveLine,
+        title: _islandTitle,
         remainingSeconds: remaining,
         totalSeconds: state.totalSeconds,
         isPaused: false,

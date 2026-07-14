@@ -20,9 +20,11 @@ struct PulseFocusLiveActivity: Widget {
       let palette = PulseLivePalette.island
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          Text("Pulse")
+          Text(PulseLiveContent.title(context: context, sharedDefault: sharedDefault))
             .font(.headline.weight(.semibold))
             .foregroundColor(.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
         }
         DynamicIslandExpandedRegion(.trailing) {
           RemainingText(context: context, sharedDefault: sharedDefault)
@@ -287,7 +289,7 @@ private enum PulseLiveContent {
     sharedDefault: UserDefaults?
   ) -> String {
     let value = string(context, sharedDefault, "title")
-    return value.isEmpty ? "Pulse Focus" : value
+    return value.isEmpty ? "Pulse" : value
   }
 
   static func subtitle(

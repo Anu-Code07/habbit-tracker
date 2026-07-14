@@ -1,11 +1,13 @@
+import 'package:pulse/features/habits/data/datasources/habit_local_datasource.dart';
+import 'package:pulse/features/habits/data/grace_day_store.dart';
 import 'package:pulse/features/habits/domain/entities/habit.dart';
 import 'package:pulse/features/habits/domain/repositories/habit_repository.dart';
-import 'package:pulse/features/habits/data/datasources/habit_local_datasource.dart';
 
 class HabitRepositoryImpl implements HabitRepository {
-  HabitRepositoryImpl(this._local);
+  HabitRepositoryImpl(this._local, this._grace);
 
   final HabitLocalDataSource _local;
+  final GraceDayStore _grace;
 
   @override
   Future<List<Habit>> getActiveHabits() => _local.getActiveHabits();
@@ -51,25 +53,36 @@ class HabitRepositoryImpl implements HabitRepository {
   @override
   Future<int> getCurrentStreak(String habitId) async {
     final checkIns = await _local.getCheckInsForHabit(habitId);
-    if (checkIns.isEmpty) return 0;
-
     final days = checkIns
         .map((c) => DateTime(c.date.year, c.date.month, c.date.day))
-        .toSet()
-        .toList()
-      ..sort((a, b) => b.compareTo(a));
+        .toSet();
+    final grace = _grace.allGraceDays();
+
+    if (days.isEmpty && grace.isEmpty) return 0;
 
     final today = DateTime.now();
     var cursor = DateTime(today.year, today.month, today.day);
-    if (!days.contains(cursor)) {
+
+    // Find a valid start: check-in or grace day today/yesterday.
+    if (!days.contains(cursor) && !grace.contains(cursor)) {
       cursor = cursor.subtract(const Duration(days: 1));
-      if (!days.contains(cursor)) return 0;
+      if (!days.contains(cursor) && !grace.contains(cursor)) return 0;
     }
 
     var streak = 0;
-    while (days.contains(cursor)) {
-      streak++;
-      cursor = cursor.subtract(const Duration(days: 1));
+    // Limit walk-back so a long grace chain can't loop forever.
+    for (var i = 0; i < 400; i++) {
+      if (days.contains(cursor)) {
+        streak++;
+        cursor = cursor.subtract(const Duration(days: 1));
+        continue;
+      }
+      if (grace.contains(cursor)) {
+        // Grace bridges the gap — streak stays intact, day not counted.
+        cursor = cursor.subtract(const Duration(days: 1));
+        continue;
+      }
+      break;
     }
     return streak;
   }

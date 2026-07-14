@@ -9,6 +9,7 @@ import 'package:pulse/core/widgets/pulse_glass.dart';
 import 'package:pulse/core/widgets/pulse_minutes_picker.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
 import 'package:pulse/features/focus/presentation/bloc/focus_bloc.dart';
+import 'package:pulse/features/focus/presentation/widgets/focus_finish_ritual.dart';
 
 class FocusPage extends StatelessWidget {
   const FocusPage({super.key});
@@ -17,7 +18,17 @@ class FocusPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<FocusBloc, FocusState>(
       builder: (context, state) {
-        if (state.isRunning || state.isCompleted || state.sessionStartedAt != null) {
+        if (state.isCompleted) {
+          return FocusFinishRitual(
+            elapsedSeconds: state.elapsedSeconds,
+            headline: state.sessionTitle.trim().isNotEmpty
+                ? state.sessionTitle.trim()
+                : (state.sessionQuote ?? ''),
+            onDone: () =>
+                context.read<FocusBloc>().add(const FocusTimerReset()),
+          );
+        }
+        if (state.isRunning || state.sessionStartedAt != null) {
           return _ActiveFocusView(state: state);
         }
         return _FocusSetupView(state: state);
@@ -294,20 +305,15 @@ class _ActiveFocusView extends StatelessWidget {
                     ),
               const Spacer(),
               _FocusTimerReadout(
-                totalSeconds: state.isCompleted
-                    ? state.elapsedSeconds
-                    : state.remainingSeconds,
+                totalSeconds: state.remainingSeconds,
               ),
               const SizedBox(height: PulseSpacing.sm),
               Text(
-                state.isCompleted
-                    ? 'Session complete'
-                    : state.sessionHeadline,
+                state.sessionHeadline,
                 style: PulseTypography.bodyLg(color: PulseColors.inkDeep),
                 textAlign: TextAlign.center,
               ),
-              if (!state.isCompleted &&
-                  state.sessionTitle.trim().isNotEmpty &&
+              if (state.sessionTitle.trim().isNotEmpty &&
                   (state.sessionQuote?.isNotEmpty ?? false)) ...[
                 const SizedBox(height: PulseSpacing.xs),
                 Text(
@@ -332,52 +338,44 @@ class _ActiveFocusView extends StatelessWidget {
                 label: 'Water is important — keep a glass nearby',
               ),
               const Spacer(),
-              if (state.isCompleted)
-                PulseSecondaryButton(
-                  label: 'Done',
-                  onPressed: () =>
-                      context.read<FocusBloc>().add(const FocusTimerReset()),
-                )
-              else ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: PulseColors.canvas,
-                      foregroundColor: PulseColors.ink,
-                    ),
-                    onPressed: () {
-                      final bloc = context.read<FocusBloc>();
-                      if (state.isRunning) {
-                        bloc.add(const FocusTimerPaused());
-                      } else {
-                        bloc.add(const FocusTimerResumed());
-                      }
-                    },
-                    child: Text(
-                      state.isRunning ? 'Pause' : 'Resume',
-                      style: PulseTypography.buttonMd(color: PulseColors.ink),
-                    ),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PulseColors.canvas,
+                    foregroundColor: PulseColors.ink,
+                  ),
+                  onPressed: () {
+                    final bloc = context.read<FocusBloc>();
+                    if (state.isRunning) {
+                      bloc.add(const FocusTimerPaused());
+                    } else {
+                      bloc.add(const FocusTimerResumed());
+                    }
+                  },
+                  child: Text(
+                    state.isRunning ? 'Pause' : 'Resume',
+                    style: PulseTypography.buttonMd(color: PulseColors.ink),
                   ),
                 ),
-                const SizedBox(height: PulseSpacing.md),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: PulseColors.ink,
-                      foregroundColor: PulseColors.primary,
-                    ),
-                    onPressed: () => context
-                        .read<FocusBloc>()
-                        .add(const FocusTimerFinished()),
-                    child: Text(
-                      'Finish',
-                      style: PulseTypography.buttonMd(color: PulseColors.primary),
-                    ),
+              ),
+              const SizedBox(height: PulseSpacing.md),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PulseColors.ink,
+                    foregroundColor: PulseColors.primary,
+                  ),
+                  onPressed: () => context
+                      .read<FocusBloc>()
+                      .add(const FocusTimerFinished()),
+                  child: Text(
+                    'Finish',
+                    style: PulseTypography.buttonMd(color: PulseColors.primary),
                   ),
                 ),
-              ],
+              ),
                   ],
                 ),
               ),
@@ -445,6 +443,7 @@ class _TipChip extends StatelessWidget {
 }
 
 String _formatLength(int totalSeconds) {
+  if (totalSeconds == 60) return '60 sec';
   final m = totalSeconds ~/ 60;
   final s = totalSeconds % 60;
   if (s == 0) return '$m min';

@@ -138,6 +138,7 @@ class FocusLiveActivityService {
     required int totalSeconds,
     required bool isPaused,
     DateTime? endsAt,
+    String? title,
     bool alertSound = false,
     String? alertTitle,
     String? alertBody,
@@ -155,9 +156,15 @@ class FocusLiveActivityService {
     final startAtMs = (!isPaused && endAtMs > 0)
         ? (_segmentStartAtMs ?? (endAtMs - safeRemaining * 1000))
         : 0;
+    final displayTitle = (title ?? '').trim();
+    final shortTitle = displayTitle.isEmpty
+        ? 'Pulse'
+        : (displayTitle.length > 22
+            ? '${displayTitle.substring(0, 21)}…'
+            : displayTitle);
 
     return <String, dynamic>{
-      'title': 'Pulse Focus',
+      'title': shortTitle,
       'subtitle': quote,
       'quote': quote,
       'remainingLabel': remainingLabel,
@@ -167,8 +174,6 @@ class FocusLiveActivityService {
       'status': isPaused ? 'paused' : 'running',
       'endAtMs': endAtMs,
       'startAtMs': startAtMs,
-      // Android Live Activity updates ignore AlertConfig; flag the payload so
-      // CustomLiveActivityManager can use a sounding notification channel.
       'alertSound': alertSound,
       if (alertTitle != null) 'alertTitle': alertTitle,
       if (alertBody != null) 'alertBody': alertBody,
@@ -214,6 +219,7 @@ class FocusLiveActivityService {
     required int remainingSeconds,
     required int totalSeconds,
     required DateTime endsAt,
+    String? title,
   }) async {
     await init();
     if (!_initialized) return;
@@ -245,6 +251,7 @@ class FocusLiveActivityService {
       totalSeconds: totalSeconds,
       isPaused: false,
       endsAt: endsAt,
+      title: title,
     );
 
     try {
@@ -314,6 +321,7 @@ class FocusLiveActivityService {
     required int totalSeconds,
     required bool isPaused,
     DateTime? endsAt,
+    String? title,
     AlertConfig? alert,
   }) async {
     if (!_active) return;
@@ -337,6 +345,7 @@ class FocusLiveActivityService {
       totalSeconds: totalSeconds,
       isPaused: isPaused,
       endsAt: endsAt,
+      title: title,
       alertSound: alert != null,
       alertTitle: alert?.title,
       alertBody: alert?.body,
