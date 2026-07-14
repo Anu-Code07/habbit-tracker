@@ -6,20 +6,25 @@ import 'package:flutter/services.dart';
 
 /// Schedules OS-level focus alerts that still fire when Flutter is suspended.
 ///
-/// - Android: AlarmManager → notification with custom WAV
-/// - iOS: UNUserNotificationCenter time-sensitive local notifications
-///
-/// Per-second warning *ticks* play via [FocusTimerSounds] while Flutter is
-/// alive, and are also scheduled here (Android MediaPlayer / iOS local notifs)
-/// so they still fire when the process is suspended.
+/// - Android: AlarmManager + MediaPlayer for warn/complete
+/// - iOS: UNUserNotificationCenter + optional AVAudioPlayer
+/// - Per-second ticks are owned by Flutter [FocusTimerSounds] while the app
+///   ticker is alive.
 abstract final class FocusBackgroundAlerts {
   static const _channel = MethodChannel('pulse/focus_alerts');
   static const _actions = EventChannel('pulse/focus_actions');
 
   static StreamSubscription<dynamic>? _actionSub;
   static final _actionController = StreamController<String>.broadcast();
+  /// Emits whether Flutter should play the completion pack chime.
+  static final _nativeCompleteController = StreamController<bool>.broadcast();
+  static bool _handlerInstalled = false;
 
   static Stream<String> get androidActions => _actionController.stream;
+
+  /// Fired when iOS dismisses the Live Activity at session end.
+  /// Value is `true` when Flutter should play the completion sound.
+  static Stream<bool> get nativeCompletes => _nativeCompleteController.stream;
 
   static Future<void> listenAndroidActions() async {
     if (!Platform.isAndroid || _actionSub != null) return;
@@ -29,6 +34,25 @@ abstract final class FocusBackgroundAlerts {
       }
     }, onError: (Object e) {
       debugPrint('FocusBackgroundAlerts action stream error: $e');
+    });
+  }
+
+  /// Lets AppDelegate invoke `focusNativeComplete` when the LA should dismiss.
+  static void ensureNativeCompleteHandler() {
+    if (_handlerInstalled) return;
+    if (kIsWeb || !Platform.isIOS) return;
+    _handlerInstalled = true;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'focusNativeComplete') {
+        if (_nativeCompleteController.isClosed) return;
+        final args = call.arguments;
+        var nativePlayed = false;
+        if (args is Map) {
+          nativePlayed = args['nativePlayed'] == true;
+        }
+        // If native already chimed, Flutter must not replay.
+        _nativeCompleteController.add(!nativePlayed);
+      }
     });
   }
 
@@ -44,6 +68,7 @@ abstract final class FocusBackgroundAlerts {
   }) async {
     if (kIsWeb) return;
     if (!(Platform.isIOS || Platform.isAndroid)) return;
+    ensureNativeCompleteHandler();
     try {
       await _channel.invokeMethod<void>('schedule', {
         'remainingSeconds': remainingSeconds,

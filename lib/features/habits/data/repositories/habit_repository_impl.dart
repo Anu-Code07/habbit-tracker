@@ -1,13 +1,11 @@
 import 'package:pulse/features/habits/data/datasources/habit_local_datasource.dart';
-import 'package:pulse/features/habits/data/grace_day_store.dart';
 import 'package:pulse/features/habits/domain/entities/habit.dart';
 import 'package:pulse/features/habits/domain/repositories/habit_repository.dart';
 
 class HabitRepositoryImpl implements HabitRepository {
-  HabitRepositoryImpl(this._local, this._grace);
+  HabitRepositoryImpl(this._local);
 
   final HabitLocalDataSource _local;
-  final GraceDayStore _grace;
 
   @override
   Future<List<Habit>> getActiveHabits() => _local.getActiveHabits();
@@ -56,30 +54,30 @@ class HabitRepositoryImpl implements HabitRepository {
     final days = checkIns
         .map((c) => DateTime(c.date.year, c.date.month, c.date.day))
         .toSet();
-    final grace = _grace.allGraceDays();
 
-    if (days.isEmpty && grace.isEmpty) return 0;
+    if (days.isEmpty) return 0;
 
     final today = DateTime.now();
     var cursor = DateTime(today.year, today.month, today.day);
 
-    // Find a valid start: check-in or grace day today/yesterday.
-    if (!days.contains(cursor) && !grace.contains(cursor)) {
+    // Soft start: today unfinished still counts from yesterday.
+    if (!days.contains(cursor)) {
       cursor = cursor.subtract(const Duration(days: 1));
-      if (!days.contains(cursor) && !grace.contains(cursor)) return 0;
+      if (!days.contains(cursor)) return 0;
     }
 
     var streak = 0;
-    // Limit walk-back so a long grace chain can't loop forever.
+    // Quiet kindness: a single missed day never breaks the chain.
+    // Two empty days in a row does.
     for (var i = 0; i < 400; i++) {
       if (days.contains(cursor)) {
         streak++;
         cursor = cursor.subtract(const Duration(days: 1));
         continue;
       }
-      if (grace.contains(cursor)) {
-        // Grace bridges the gap — streak stays intact, day not counted.
-        cursor = cursor.subtract(const Duration(days: 1));
+      final bridged = cursor.subtract(const Duration(days: 1));
+      if (days.contains(bridged)) {
+        cursor = bridged;
         continue;
       }
       break;

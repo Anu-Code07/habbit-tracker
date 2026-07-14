@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:pulse/core/theme/pulse_greetings.dart';
 import 'package:pulse/core/widgets/pulse_home_widget_sync.dart';
 import 'package:pulse/features/focus/domain/usecases/focus_usecases.dart';
-import 'package:pulse/features/habits/data/grace_day_store.dart';
 import 'package:pulse/features/habits/domain/entities/habit.dart';
 import 'package:pulse/features/habits/domain/usecases/habit_usecases.dart';
 import 'package:pulse/features/settings/data/settings_repository.dart';
@@ -42,10 +41,6 @@ class TodayGreetingRolled extends TodayEvent {
   const TodayGreetingRolled();
 }
 
-class TodayGraceDayRequested extends TodayEvent {
-  const TodayGraceDayRequested();
-}
-
 sealed class TodayState extends Equatable {
   const TodayState();
   @override
@@ -66,8 +61,6 @@ class TodaySuccess extends TodayState {
     required this.selectedDate,
     required this.greeting,
     this.isRefreshing = false,
-    this.graceAvailable = true,
-    this.isGraceDay = false,
     this.message,
   });
 
@@ -75,8 +68,6 @@ class TodaySuccess extends TodayState {
   final DateTime selectedDate;
   final String greeting;
   final bool isRefreshing;
-  final bool graceAvailable;
-  final bool isGraceDay;
   final String? message;
 
   double get completionRate {
@@ -90,8 +81,6 @@ class TodaySuccess extends TodayState {
     DateTime? selectedDate,
     String? greeting,
     bool? isRefreshing,
-    bool? graceAvailable,
-    bool? isGraceDay,
     String? message,
     bool clearMessage = false,
   }) {
@@ -100,8 +89,6 @@ class TodaySuccess extends TodayState {
       selectedDate: selectedDate ?? this.selectedDate,
       greeting: greeting ?? this.greeting,
       isRefreshing: isRefreshing ?? this.isRefreshing,
-      graceAvailable: graceAvailable ?? this.graceAvailable,
-      isGraceDay: isGraceDay ?? this.isGraceDay,
       message: clearMessage ? null : (message ?? this.message),
     );
   }
@@ -112,8 +99,6 @@ class TodaySuccess extends TodayState {
         selectedDate,
         greeting,
         isRefreshing,
-        graceAvailable,
-        isGraceDay,
         message,
       ];
 }
@@ -123,24 +108,18 @@ class TodayEmpty extends TodayState {
     required this.selectedDate,
     required this.greeting,
     this.isRefreshing = false,
-    this.graceAvailable = true,
-    this.isGraceDay = false,
     this.message,
   });
 
   final DateTime selectedDate;
   final String greeting;
   final bool isRefreshing;
-  final bool graceAvailable;
-  final bool isGraceDay;
   final String? message;
 
   TodayEmpty copyWith({
     DateTime? selectedDate,
     String? greeting,
     bool? isRefreshing,
-    bool? graceAvailable,
-    bool? isGraceDay,
     String? message,
     bool clearMessage = false,
   }) {
@@ -148,8 +127,6 @@ class TodayEmpty extends TodayState {
       selectedDate: selectedDate ?? this.selectedDate,
       greeting: greeting ?? this.greeting,
       isRefreshing: isRefreshing ?? this.isRefreshing,
-      graceAvailable: graceAvailable ?? this.graceAvailable,
-      isGraceDay: isGraceDay ?? this.isGraceDay,
       message: clearMessage ? null : (message ?? this.message),
     );
   }
@@ -159,8 +136,6 @@ class TodayEmpty extends TodayState {
         selectedDate,
         greeting,
         isRefreshing,
-        graceAvailable,
-        isGraceDay,
         message,
       ];
 }
@@ -180,21 +155,18 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
     required PulseHomeWidgetSync homeWidgetSync,
     required DedupeHabits dedupeHabits,
     required GetTodayFocusMinutes getTodayFocusMinutes,
-    required GraceDayStore graceDayStore,
   })  : _getTodayHabits = getTodayHabits,
         _toggleHabitCheckIn = toggleHabitCheckIn,
         _settingsRepository = settingsRepository,
         _homeWidgetSync = homeWidgetSync,
         _dedupeHabits = dedupeHabits,
         _getTodayFocusMinutes = getTodayFocusMinutes,
-        _grace = graceDayStore,
         super(const TodayInitial()) {
     on<TodayStarted>(_onStarted);
     on<TodayRefreshed>(_onRefresh);
     on<TodayDateSelected>(_onDate);
     on<TodayHabitToggled>(_onToggle);
     on<TodayGreetingRolled>(_onGreetingRolled);
-    on<TodayGraceDayRequested>(_onGraceDay);
   }
 
   final GetTodayHabits _getTodayHabits;
@@ -203,7 +175,6 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
   final PulseHomeWidgetSync _homeWidgetSync;
   final DedupeHabits _dedupeHabits;
   final GetTodayFocusMinutes _getTodayFocusMinutes;
-  final GraceDayStore _grace;
 
   DateTime _selected = DateTime.now();
   int _loadGeneration = 0;
@@ -227,62 +198,6 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
     } else if (current is TodayEmpty) {
       emit(current.copyWith(greeting: greeting));
     }
-  }
-
-  Future<void> _onGraceDay(
-    TodayGraceDayRequested event,
-    Emitter<TodayState> emit,
-  ) async {
-    final day = _normalize(_selected);
-    final ok = await _grace.useGraceFor(day);
-    if (!ok) {
-      final current = state;
-      if (current is TodaySuccess) {
-        emit(
-          current.copyWith(
-            message: 'Grace already used this week.',
-          ),
-        );
-      } else if (current is TodayEmpty) {
-        emit(
-          current.copyWith(
-            message: 'Grace already used this week.',
-          ),
-        );
-      }
-      return;
-    }
-
-    if (_settingsRepository.hapticsEnabled) {
-      await HapticFeedback.selectionClick();
-    }
-
-    final habits = await _getTodayHabits(date: _selected);
-    final greeting = await _rollGreeting();
-    final message = 'Grace used · streak safe.';
-    if (habits.isEmpty) {
-      emit(
-        TodayEmpty(
-          selectedDate: day,
-          greeting: greeting,
-          graceAvailable: false,
-          isGraceDay: true,
-          message: message,
-        ),
-      );
-    } else {
-      emit(
-        TodaySuccess(
-          habits: habits,
-          selectedDate: day,
-          greeting: greeting,
-          graceAvailable: false,
-          isGraceDay: true,
-          message: message,
-        ),
-      );
-    }
-    await _homeWidgetSync.sync();
   }
 
   Future<void> _onStarted(TodayStarted event, Emitter<TodayState> emit) async {
@@ -332,16 +247,12 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
       if (generation != _loadGeneration) return;
       final greeting = await _rollGreeting();
       final day = _normalize(_selected);
-      final graceAvailable = _grace.canUseGrace(day);
-      final isGraceDay = _grace.isGraceDay(day);
       if (habits.isEmpty) {
         emit(
           TodayEmpty(
             selectedDate: day,
             greeting: greeting,
             isRefreshing: false,
-            graceAvailable: graceAvailable,
-            isGraceDay: isGraceDay,
           ),
         );
       } else {
@@ -351,8 +262,6 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
             selectedDate: day,
             greeting: greeting,
             isRefreshing: false,
-            graceAvailable: graceAvailable,
-            isGraceDay: isGraceDay,
           ),
         );
       }
@@ -395,8 +304,6 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
           TodayEmpty(
             selectedDate: day,
             greeting: current.greeting,
-            graceAvailable: current.graceAvailable,
-            isGraceDay: current.isGraceDay,
           ),
         );
       } else {
@@ -405,8 +312,6 @@ class TodayBloc extends Bloc<TodayEvent, TodayState> {
             habits: habits,
             selectedDate: day,
             greeting: current.greeting,
-            graceAvailable: current.graceAvailable,
-            isGraceDay: current.isGraceDay,
           ),
         );
       }

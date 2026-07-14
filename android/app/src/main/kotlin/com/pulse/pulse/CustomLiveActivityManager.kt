@@ -30,8 +30,13 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
 
     companion object {
         const val CHANNEL_PROGRESS = "Pulse Focus"
-        const val CHANNEL_WARN = "Pulse Focus Warning"
-        const val CHANNEL_COMPLETE = "Pulse Focus Complete"
+        // v2 — prior builds used a broken resource URI and stayed silent.
+        const val CHANNEL_WARN = "pulse_focus_warn_v2"
+        const val CHANNEL_COMPLETE = "pulse_focus_complete_v2"
+        const val CHANNEL_WARN_WOOD = "pulse_focus_warn_wood_v2"
+        const val CHANNEL_COMPLETE_WOOD = "pulse_focus_complete_wood_v2"
+        // Visual-only banners — audio is MediaPlayer ALARM (avoids double chime).
+        const val CHANNEL_ALERT_BANNER = "pulse_focus_alert_banner_v2"
 
         const val ACTION_PAUSE = "com.pulse.pulse.FOCUS_PAUSE"
         const val ACTION_RESUME = "com.pulse.pulse.FOCUS_RESUME"
@@ -41,6 +46,10 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         const val ACTION_TICK = "com.pulse.pulse.FOCUS_TICK"
 
         const val EXTRA_QUOTE = "quote"
+        const val EXTRA_SOUND_PACK = "soundPack"
+
+        private const val PREFS = "pulse_focus_alerts"
+        private const val PREF_SOUND_PACK = "sound_pack"
 
         private const val REQ_PAUSE = 301
         private const val REQ_RESUME = 302
@@ -71,6 +80,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
     private var activeSoundPack: String = "soft"
 
     init {
+        restoreSoundPack()
         ensureChannels()
     }
 
@@ -82,11 +92,21 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         val manager =
             appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+        // Drop legacy broken channels (wrong sound URI / silent).
+        listOf(
+            "Pulse Focus Warning",
+            "Pulse Focus Complete",
+            "Pulse Focus Warning · Wood",
+            "Pulse Focus Complete · Wood",
+        ).forEach { legacy ->
+            runCatching { manager.deleteNotificationChannel(legacy) }
+        }
+
         if (manager.getNotificationChannel(CHANNEL_PROGRESS) == null) {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_PROGRESS,
-                    CHANNEL_PROGRESS,
+                    "Pulse Focus",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
                     setSound(null, null)
@@ -97,40 +117,51 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
             )
         }
 
+        ensureSoundingChannel(manager, CHANNEL_WARN, "Focus warning (10s)", "focus_warning")
+        ensureSoundingChannel(manager, CHANNEL_COMPLETE, "Focus complete", "focus_complete")
         ensureSoundingChannel(
             manager,
-            CHANNEL_WARN,
-            "Focus warning (10s)",
-            R.raw.focus_warning,
-        )
-        ensureSoundingChannel(
-            manager,
-            CHANNEL_COMPLETE,
-            "Focus complete",
-            R.raw.focus_complete,
-        )
-        ensureSoundingChannel(
-            manager,
-            "$CHANNEL_WARN · Wood",
+            CHANNEL_WARN_WOOD,
             "Focus warning (wood)",
-            R.raw.focus_warning_wood,
+            "focus_warning_wood",
         )
         ensureSoundingChannel(
             manager,
-            "$CHANNEL_COMPLETE · Wood",
+            CHANNEL_COMPLETE_WOOD,
             "Focus complete (wood)",
-            R.raw.focus_complete_wood,
+            "focus_complete_wood",
         )
+        if (manager.getNotificationChannel(CHANNEL_ALERT_BANNER) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ALERT_BANNER,
+                    "Focus alerts",
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = "Focus warning/complete banners (sound via MediaPlayer)"
+                    setSound(null, null)
+                    enableVibration(true)
+                    setShowBadge(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                },
+            )
+        }
     }
 
     private fun warnChannel(): String =
-        if (activeSoundPack == "wood") "$CHANNEL_WARN · Wood" else CHANNEL_WARN
+        if (activeSoundPack == "wood") CHANNEL_WARN_WOOD else CHANNEL_WARN
 
     private fun completeChannel(): String =
-        if (activeSoundPack == "wood") "$CHANNEL_COMPLETE · Wood" else CHANNEL_COMPLETE
+        if (activeSoundPack == "wood") CHANNEL_COMPLETE_WOOD else CHANNEL_COMPLETE
 
     private fun tickRaw(): Int =
         if (activeSoundPack == "wood") R.raw.focus_tick_wood else R.raw.focus_tick
+
+    private fun completeRaw(): Int =
+        if (activeSoundPack == "wood") R.raw.focus_complete_wood else R.raw.focus_complete
+
+    private fun warnRaw(): Int =
+        if (activeSoundPack == "wood") R.raw.focus_warning_wood else R.raw.focus_warning
 
     private fun completeRawName(): String =
         if (activeSoundPack == "wood") "focus_complete_wood" else "focus_complete"
@@ -142,16 +173,9 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         manager: NotificationManager,
         id: String,
         description: String,
-        soundRes: Int,
+        rawName: String,
     ) {
-        val existing = manager.getNotificationChannel(id)
-        // Recreate if missing or silent/importance too low from older builds.
-        if (existing != null && existing.importance >= NotificationManager.IMPORTANCE_DEFAULT) {
-            return
-        }
-        if (existing != null) {
-            manager.deleteNotificationChannel(id)
-        }
+        if (manager.getNotificationChannel(id) != null) return
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -159,16 +183,32 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         manager.createNotificationChannel(
             NotificationChannel(
                 id,
-                id,
+                description,
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 this.description = description
-                setSound(Uri.parse("android.resource://${appContext.packageName}/$soundRes"), attrs)
+                setSound(rawSoundUri(rawName), attrs)
                 enableVibration(true)
+                enableLights(true)
                 setShowBadge(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             },
         )
+    }
+
+    fun applySoundPack(pack: String) {
+        activeSoundPack = pack
+        appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PREF_SOUND_PACK, pack)
+            .apply()
+    }
+
+    fun restoreSoundPack(fallback: String = "soft") {
+        activeSoundPack = appContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(PREF_SOUND_PACK, fallback)
+            ?: fallback
     }
 
     private fun isSystemDark(): Boolean {
@@ -195,6 +235,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         val intent = Intent(appContext, FocusAlertReceiver::class.java).apply {
             this.action = action
             putExtra(EXTRA_QUOTE, quote)
+            putExtra(EXTRA_SOUND_PACK, activeSoundPack)
         }
         return PendingIntent.getBroadcast(
             appContext,
@@ -231,6 +272,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         force: Boolean = false,
     ) {
         activeSoundPack = soundPack
+        applySoundPack(soundPack)
         if (paused || remainingSeconds <= 0L || soundPack == "silent") {
             cancelAlerts()
             return
@@ -251,7 +293,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         cancelAlerts()
         lastScheduledEndAtMs = endWall
         lastScheduledPaused = false
-        activeSoundPack = soundPack
+        applySoundPack(soundPack)
 
         val alarm = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
@@ -277,7 +319,7 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         if (warningEnabled && remainingSeconds > 10L && warnAt > nowWall) {
             setExact(warnAt, ACTION_WARN, REQ_WARN)
         }
-        // Per-second warning ticks for remaining 9..1 (10s uses warning chime).
+        // Native ticks cover lock/Doze; Flutter skips ticks when not resumed.
         if (ticksEnabled) {
             for (secLeft in 1..9) {
                 if (remainingSeconds <= secLeft) continue
@@ -292,25 +334,57 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
 
     /** Short tick — no notification shade spam. */
     fun playTickSound() {
+        playRaw(tickRaw())
+    }
+
+    fun playWarnSound() {
+        playRaw(warnRaw())
+    }
+
+    fun playCompleteSound() {
+        playRaw(completeRaw())
+    }
+
+    /**
+     * Plays via ALARM usage so completion/ticks still cut through focus-mode
+     * and are louder than media stream defaults.
+     */
+    private fun playRaw(resId: Int) {
         try {
-            MediaPlayer.create(appContext, tickRaw())?.apply {
-                setOnCompletionListener { player ->
-                    try {
-                        player.release()
-                    } catch (_: Exception) {
-                    }
+            val afd = appContext.resources.openRawResourceFd(resId) ?: return
+            val player = MediaPlayer()
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+            afd.close()
+            player.setOnCompletionListener { p ->
+                try {
+                    p.release()
+                } catch (_: Exception) {
                 }
-                setOnErrorListener { player, _, _ ->
-                    try {
-                        player.release()
-                    } catch (_: Exception) {
-                    }
-                    true
-                }
-                start()
             }
+            player.setOnErrorListener { p, _, _ ->
+                try {
+                    p.release()
+                } catch (_: Exception) {
+                }
+                true
+            }
+            player.prepare()
+            player.start()
         } catch (_: Exception) {
-            // best-effort
+            // Fall back to create() if openRawResourceFd path fails.
+            try {
+                MediaPlayer.create(appContext, resId)?.apply {
+                    setOnCompletionListener { it.release() }
+                    start()
+                }
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -455,8 +529,9 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         }
 
         if (alert) {
-            builder.setDefaults(Notification.DEFAULT_SOUND or Notification.DEFAULT_VIBRATE)
-            builder.setAutoCancel(true)
+            // Keep the ongoing timer notification — don't turn it into a
+            // swipe-awayable alarm banner (completion/warn use a separate id).
+            builder.setOnlyAlertOnce(true)
         }
 
         if (event == "end") {
@@ -471,18 +546,12 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         val manager =
             appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val isWarn = kind == ACTION_WARN
-        val channel = if (isWarn) warnChannel() else completeChannel()
         val title = if (isWarn) "Almost done" else "Focus complete"
         val body = quote?.takeIf { it.isNotBlank() }
             ?: if (isWarn) "10 seconds left" else "Nice work — session finished"
-        val soundName = if (isWarn) warnRawName() else completeRawName()
-        val soundRes = if (isWarn) {
-            if (activeSoundPack == "wood") R.raw.focus_warning_wood else R.raw.focus_warning
-        } else {
-            if (activeSoundPack == "wood") R.raw.focus_complete_wood else R.raw.focus_complete
-        }
 
-        val builder = Notification.Builder(appContext, channel)
+        // Sound comes from MediaPlayer (ALARM) — silent banner channel only.
+        val builder = Notification.Builder(appContext, CHANNEL_ALERT_BANNER)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
@@ -491,13 +560,10 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setPriority(Notification.PRIORITY_HIGH)
-            .setSound(rawSoundUri(soundName))
             .setDefaults(Notification.DEFAULT_VIBRATE)
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            builder.setSound(
-                Uri.parse("android.resource://${appContext.packageName}/$soundRes"),
-            )
+            builder.setSound(null)
         }
 
         manager.notify(ALERT_BASE_ID + if (isWarn) 1 else 2, builder.build())

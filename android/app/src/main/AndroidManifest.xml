@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="pulse"
         android:name="${applicationName}"
@@ -53,6 +54,7 @@
             <intent-filter>
                 <action android:name="com.pulse.pulse.FOCUS_WARN" />
                 <action android:name="com.pulse.pulse.FOCUS_COMPLETE" />
+                <action android:name="com.pulse.pulse.FOCUS_TICK" />
             </intent-filter>
         </receiver>
         <meta-data

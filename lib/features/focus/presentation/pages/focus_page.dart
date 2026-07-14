@@ -21,9 +21,7 @@ class FocusPage extends StatelessWidget {
         if (state.isCompleted) {
           return FocusFinishRitual(
             elapsedSeconds: state.elapsedSeconds,
-            headline: state.sessionTitle.trim().isNotEmpty
-                ? state.sessionTitle.trim()
-                : (state.sessionQuote ?? ''),
+            headline: state.sessionQuote ?? '',
             onDone: () =>
                 context.read<FocusBloc>().add(const FocusTimerReset()),
           );
@@ -69,10 +67,16 @@ class _FocusSetupViewState extends State<_FocusSetupView> {
     super.dispose();
   }
 
-  Future<void> _pickPomodoro(BuildContext context) async {
+  Future<void> _pickLength(BuildContext context) async {
+    final isPomodoro = widget.state.mode == FocusMode.pomodoro;
     final minutes = await showPulseMinutesPicker(
       context,
-      initialMinutes: widget.state.totalSeconds ~/ 60,
+      initialMinutes: widget.state.totalSeconds == 60 && isPomodoro
+          ? 1
+          : widget.state.totalSeconds ~/ 60,
+      options: isPomodoro ? null : PulseFreeMinutes.options,
+      title: isPomodoro ? 'Pomodoro' : 'Free focus',
+      labelOf: isPomodoro ? null : PulseFreeMinutes.label,
     );
     if (minutes == null || !context.mounted) return;
     context.read<FocusBloc>().add(FocusDurationChanged(minutes));
@@ -115,7 +119,7 @@ class _FocusSetupViewState extends State<_FocusSetupView> {
                             .add(FocusTitleChanged(value)),
                         style: PulseTypography.bodyMdStrong(),
                         decoration: InputDecoration(
-                          hintText: 'Optional — e.g. Write README',
+                          hintText: 'Whatever feels gentle right now…',
                           hintStyle: PulseTypography.bodyMd(
                             color: PulseColors.mute,
                           ),
@@ -161,58 +165,46 @@ class _FocusSetupViewState extends State<_FocusSetupView> {
                         ],
                       ),
                       const SizedBox(height: PulseSpacing.xl),
-                      if (isPomodoro) ...[
-                        Text(
-                          'Length',
-                          style: PulseTypography.bodySmStrong(),
-                        ),
-                        const SizedBox(height: PulseSpacing.sm),
-                        GestureDetector(
-                          onTap: () => _pickPomodoro(context),
-                          child: PulseGlass(
-                            tint: PulseColors.primaryPale,
-                            opacity: 0.65,
-                            blur: 10,
-                            borderRadius:
-                                BorderRadius.circular(PulseRadii.lg),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: PulseSpacing.lg,
-                              vertical: PulseSpacing.md,
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _formatLength(state.totalSeconds),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: PulseTypography.displaySm(),
-                                  ),
+                      Text(
+                        'Length',
+                        style: PulseTypography.bodySmStrong(),
+                      ),
+                      const SizedBox(height: PulseSpacing.sm),
+                      GestureDetector(
+                        onTap: () => _pickLength(context),
+                        child: PulseGlass(
+                          tint: PulseColors.primaryPale,
+                          opacity: 0.65,
+                          blur: 10,
+                          borderRadius:
+                              BorderRadius.circular(PulseRadii.lg),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: PulseSpacing.lg,
+                            vertical: PulseSpacing.md,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _formatLength(state.totalSeconds),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: PulseTypography.displaySm(),
                                 ),
-                                Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: PulseColors.ink.withValues(alpha: 0.7),
-                                ),
-                              ],
-                            ),
+                              ),
+                              Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: PulseColors.ink.withValues(alpha: 0.7),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: PulseSpacing.sm),
-                        Text(
-                          'Tap to choose · deep work block',
-                          style: PulseTypography.bodySm(),
-                        ),
-                      ] else ...[
-                        Text(
-                          _formatLength(state.totalSeconds),
-                          maxLines: 1,
-                          style: PulseTypography.displaySm(),
-                        ),
-                        Text(
-                          'Up to 60 minutes',
-                          style: PulseTypography.bodySm(),
-                        ),
-                      ],
+                      ),
+                      const SizedBox(height: PulseSpacing.sm),
+                      Text(
+                        'Tap to choose · a soft pocket of time',
+                        style: PulseTypography.bodySm(),
+                      ),
                     ],
                   ),
                 ),
@@ -235,6 +227,39 @@ class _FocusSetupViewState extends State<_FocusSetupView> {
 class _ActiveFocusView extends StatelessWidget {
   const _ActiveFocusView({required this.state});
   final FocusState state;
+
+  Future<void> _confirmClose(BuildContext context) async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Leave this block?', style: PulseTypography.bodyLg()),
+        content: Text(
+          'Keep what you already focused, or discard it.',
+          style: PulseTypography.bodyMd(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'discard'),
+            child: Text('Discard', style: PulseTypography.bodySm()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'keep'),
+            child: Text(
+              'Keep & finish',
+              style: PulseTypography.bodySmStrong(),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted || choice == null) return;
+    final bloc = context.read<FocusBloc>();
+    if (choice == 'keep') {
+      bloc.add(const FocusTimerFinished());
+    } else {
+      bloc.add(const FocusTimerReset());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,9 +321,7 @@ class _ActiveFocusView extends StatelessWidget {
                         blur: 12,
                         borderRadius: BorderRadius.circular(PulseRadii.full),
                         child: IconButton(
-                          onPressed: () => context
-                              .read<FocusBloc>()
-                              .add(const FocusTimerReset()),
+                          onPressed: () => _confirmClose(context),
                           icon: const Icon(Icons.close_rounded, color: PulseColors.ink),
                         ),
                       ),
@@ -309,19 +332,12 @@ class _ActiveFocusView extends StatelessWidget {
               ),
               const SizedBox(height: PulseSpacing.sm),
               Text(
-                state.sessionHeadline,
+                state.sessionTitle.trim().isNotEmpty
+                    ? state.sessionTitle.trim()
+                    : 'Stay with it',
                 style: PulseTypography.bodyLg(color: PulseColors.inkDeep),
                 textAlign: TextAlign.center,
               ),
-              if (state.sessionTitle.trim().isNotEmpty &&
-                  (state.sessionQuote?.isNotEmpty ?? false)) ...[
-                const SizedBox(height: PulseSpacing.xs),
-                Text(
-                  state.sessionQuote!,
-                  style: PulseTypography.bodySm(color: PulseColors.inkDeep),
-                  textAlign: TextAlign.center,
-                ),
-              ],
               const SizedBox(height: PulseSpacing.xxl),
               const _TipChip(
                 icon: Icons.music_note_rounded,
@@ -415,7 +431,11 @@ class _ModeChip extends StatelessWidget {
 }
 
 class _TipChip extends StatelessWidget {
-  const _TipChip({required this.icon, required this.label});
+  const _TipChip({
+    required this.icon,
+    required this.label,
+  });
+
   final IconData icon;
   final String label;
 

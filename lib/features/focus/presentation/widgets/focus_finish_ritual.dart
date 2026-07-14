@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +8,9 @@ import 'package:pulse/core/theme/pulse_colors.dart';
 import 'package:pulse/core/theme/pulse_spacing.dart';
 import 'package:pulse/core/theme/pulse_typography.dart';
 import 'package:pulse/core/widgets/pulse_widgets.dart';
+import 'package:pulse/features/focus/domain/focus_quotes.dart';
 
-/// Soft completion moment — light swell, breath cue, one kind line.
+/// Soft completion moment — light swell, amoeba pulse, one kind line.
 class FocusFinishRitual extends StatefulWidget {
   const FocusFinishRitual({
     super.key,
@@ -32,16 +34,32 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
   late final AnimationController _doneReveal;
 
   late final Animation<double> _wash;
-  late final Animation<double> _ringReveal;
+  late final Animation<double> _blobReveal;
   late final Animation<double> _titleOpacity;
   late final Animation<Offset> _titleSlide;
   late final Animation<double> _metaOpacity;
   late final Animation<double> _doneOpacity;
   late final Animation<double> _breathT;
 
+  late final String _comfortQuote;
+  late final String _comfortTitle;
+
+  static const _titles = [
+    'You can soften now',
+    'That was enough for today',
+    'Rest in what you gave',
+    'You held it kindly',
+    'A quiet win is still a win',
+  ];
+
   @override
   void initState() {
     super.initState();
+
+    _comfortQuote = widget.headline.trim().isNotEmpty
+        ? widget.headline.trim()
+        : PulseFocusQuotes.next();
+    _comfortTitle = _titles[math.Random().nextInt(_titles.length)];
 
     _intro = AnimationController(
       vsync: this,
@@ -49,7 +67,7 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
     );
     _breath = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 4800),
+      duration: const Duration(milliseconds: 5200),
     );
     _doneReveal = AnimationController(
       vsync: this,
@@ -60,7 +78,7 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
       parent: _intro,
       curve: const Interval(0.0, 0.45, curve: Curves.easeOutCubic),
     );
-    _ringReveal = CurvedAnimation(
+    _blobReveal = CurvedAnimation(
       parent: _intro,
       curve: const Interval(0.12, 0.55, curve: Curves.easeOutBack),
     );
@@ -116,11 +134,6 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
     return '$m min ${s.toString().padLeft(2, '0')}s kept';
   }
 
-  String get _breathLabel {
-    // First half of the cycle = inhale, second = exhale.
-    return _breathT.value < 0.5 ? 'Inhale' : 'Exhale';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,8 +141,7 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
       body: AnimatedBuilder(
         animation: Listenable.merge([_intro, _breath, _doneReveal]),
         builder: (context, _) {
-          final breath = 0.86 + (_breathT.value * 0.22);
-          final breathSoft = 0.9 + (_breathT.value * 0.16);
+          final pulse = 0.92 + (_breathT.value * 0.14);
 
           return DecoratedBox(
             decoration: BoxDecoration(
@@ -158,7 +170,6 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Soft white-green wash from the center.
                 Opacity(
                   opacity: (0.25 + _wash.value * 0.55).clamp(0.0, 0.85),
                   child: DecoratedBox(
@@ -176,22 +187,6 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
                     ),
                   ),
                 ),
-                // Outer breathing glow.
-                Center(
-                  child: Transform.scale(
-                    scale: breathSoft * (0.55 + _ringReveal.value * 0.45),
-                    child: Container(
-                      width: 280,
-                      height: 280,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withValues(
-                          alpha: 0.12 + _breathT.value * 0.08,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(PulseSpacing.xl),
@@ -200,35 +195,20 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
                       children: [
                         const Spacer(flex: 2),
                         SizedBox(
-                          height: 220,
+                          height: 240,
                           child: Center(
                             child: Opacity(
-                              opacity: _ringReveal.value.clamp(0.0, 1.0),
+                              opacity: _blobReveal.value.clamp(0.0, 1.0),
                               child: Transform.scale(
-                                scale: breath * (0.7 + _ringReveal.value * 0.3),
+                                scale:
+                                    pulse * (0.72 + _blobReveal.value * 0.28),
                                 child: CustomPaint(
-                                  size: const Size(200, 200),
-                                  painter: _BreathRingsPainter(
+                                  size: const Size(220, 220),
+                                  painter: _AmoebaBlobPainter(
                                     progress: _breathT.value,
-                                    accent: PulseColors.ink.withValues(
-                                      alpha: 0.55,
-                                    ),
-                                    soft: Colors.white.withValues(alpha: 0.65),
-                                  ),
-                                  child: Center(
-                                    child: AnimatedOpacity(
-                                      duration: const Duration(milliseconds: 280),
-                                      opacity: _intro.status ==
-                                              AnimationStatus.completed
-                                          ? 1
-                                          : 0,
-                                      child: Text(
-                                        _breathLabel,
-                                        style: PulseTypography.bodySmStrong(
-                                          color: PulseColors.inkDeep,
-                                        ),
-                                      ),
-                                    ),
+                                    fill: const Color(0xFF9BE86A),
+                                    glow: Colors.white,
+                                    ink: PulseColors.inkDeep,
                                   ),
                                 ),
                               ),
@@ -241,7 +221,7 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
                           child: FadeTransition(
                             opacity: _titleOpacity,
                             child: Text(
-                              'That block is yours',
+                              _comfortTitle,
                               style: PulseTypography.displayMd(
                                 color: PulseColors.ink,
                               ),
@@ -261,16 +241,14 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
                                 ),
                                 textAlign: TextAlign.center,
                               ),
-                              if (widget.headline.trim().isNotEmpty) ...[
-                                const SizedBox(height: PulseSpacing.sm),
-                                Text(
-                                  widget.headline,
-                                  style: PulseTypography.bodyMd(
-                                    color: PulseColors.inkDeep,
-                                  ),
-                                  textAlign: TextAlign.center,
+                              const SizedBox(height: PulseSpacing.md),
+                              Text(
+                                _comfortQuote,
+                                style: PulseTypography.bodyMd(
+                                  color: PulseColors.inkDeep,
                                 ),
-                              ],
+                                textAlign: TextAlign.center,
+                              ),
                             ],
                           ),
                         ),
@@ -295,71 +273,124 @@ class _FocusFinishRitualState extends State<FocusFinishRitual>
   }
 }
 
-class _BreathRingsPainter extends CustomPainter {
-  _BreathRingsPainter({
+/// Soft organic amoeba that gently morphs while pulsing.
+class _AmoebaBlobPainter extends CustomPainter {
+  _AmoebaBlobPainter({
     required this.progress,
-    required this.accent,
-    required this.soft,
+    required this.fill,
+    required this.glow,
+    required this.ink,
   });
 
   final double progress;
-  final Color accent;
-  final Color soft;
+  final Color fill;
+  final Color glow;
+  final Color ink;
+
+  Path _blobPath(Offset center, double radius, double t) {
+    const lobes = 8;
+    final points = <Offset>[];
+    for (var i = 0; i < lobes; i++) {
+      final angle = (i / lobes) * math.pi * 2;
+      // Uneven radii + slow phase drift = living amoeba silhouette.
+      final wobble =
+          0.78 +
+          0.14 * math.sin(angle * 3 + t * math.pi * 2) +
+          0.10 * math.cos(angle * 5 - t * math.pi * 2 * 0.7) +
+          0.06 * math.sin(angle * 2 + t * math.pi);
+      final r = radius * wobble;
+      points.add(
+        Offset(
+          center.dx + math.cos(angle) * r,
+          center.dy + math.sin(angle) * r,
+        ),
+      );
+    }
+
+    final path = Path();
+    if (points.isEmpty) return path;
+
+    // Smooth closed curve through points (midpoint quadratic chain).
+    Offset mid(Offset a, Offset b) => Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+    path.moveTo(mid(points.last, points.first).dx, mid(points.last, points.first).dy);
+    for (var i = 0; i < lobes; i++) {
+      final current = points[i];
+      final next = points[(i + 1) % lobes];
+      path.quadraticBezierTo(
+        current.dx,
+        current.dy,
+        mid(current, next).dx,
+        mid(current, next).dy,
+      );
+    }
+    path.close();
+    return path;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final maxR = size.shortestSide / 2;
+    final baseR = size.shortestSide * 0.38;
+    final path = _blobPath(center, baseR, progress);
 
-    for (var i = 0; i < 3; i++) {
-      final phase = (progress + i * 0.18) % 1.0;
-      final expand = 0.55 + phase * 0.45;
-      final opacity = (1.0 - phase) * (0.55 - i * 0.12);
-      final paint = Paint()
+    // Soft outer glow (larger, more transparent twin).
+    final glowPath = _blobPath(center, baseR * 1.22, progress + 0.08);
+    canvas.drawPath(
+      glowPath,
+      Paint()
+        ..color = glow.withValues(alpha: 0.35 + progress * 0.12)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 28),
+    );
+
+    final shader = ui.Gradient.radial(
+      center,
+      baseR * 1.15,
+      [
+        Colors.white.withValues(alpha: 0.92),
+        fill.withValues(alpha: 0.95),
+        fill.withValues(alpha: 0.55),
+      ],
+      const [0.0, 0.45, 1.0],
+    );
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = shader
+        ..style = PaintingStyle.fill,
+    );
+
+    // Gentle rim for definition without hard rings.
+    canvas.drawPath(
+      path,
+      Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6 - (i * 0.25)
-        ..color = accent.withValues(alpha: opacity.clamp(0.08, 0.55));
-      canvas.drawCircle(center, maxR * expand, paint);
-    }
+        ..strokeWidth = 1.6
+        ..color = ink.withValues(alpha: 0.12 + progress * 0.08),
+    );
 
-    // Core glass disc.
-    final core = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          soft,
-          soft.withValues(alpha: 0.15),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: maxR * 0.72));
-    canvas.drawCircle(center, maxR * (0.42 + progress * 0.08), core);
-
-    // Thin crisp ring.
-    final rim = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..color = accent.withValues(alpha: 0.35 + progress * 0.2);
-    canvas.drawCircle(center, maxR * (0.42 + progress * 0.08), rim);
-
-    // Soft highlight arc.
-    final highlight = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.white.withValues(alpha: 0.55);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: maxR * (0.42 + progress * 0.08)),
-      -math.pi * 0.9,
-      math.pi * 0.55,
-      false,
+    // Specular highlight blob inside.
+    final highlight = Path()
+      ..addOval(
+        Rect.fromCenter(
+          center: center.translate(-baseR * 0.18, -baseR * 0.22),
+          width: baseR * 0.55,
+          height: baseR * 0.38,
+        ),
+      );
+    canvas.drawPath(
       highlight,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
     );
   }
 
   @override
-  bool shouldRepaint(covariant _BreathRingsPainter oldDelegate) {
+  bool shouldRepaint(covariant _AmoebaBlobPainter oldDelegate) {
     return oldDelegate.progress != progress ||
-        oldDelegate.accent != accent ||
-        oldDelegate.soft != soft;
+        oldDelegate.fill != fill ||
+        oldDelegate.glow != glow ||
+        oldDelegate.ink != ink;
   }
 }

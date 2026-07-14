@@ -128,7 +128,6 @@ class AppShell extends StatelessWidget {
             homeWidgetSync: sl<PulseHomeWidgetSync>(),
             dedupeHabits: sl<DedupeHabits>(),
             getTodayFocusMinutes: sl<GetTodayFocusMinutes>(),
-            graceDayStore: sl(),
           )..add(const TodayStarted()),
         ),
         BlocProvider(
@@ -164,42 +163,69 @@ class AppShell extends StatelessWidget {
           )..add(const SettingsStarted()),
         ),
       ],
-      child: Builder(
-        builder: (context) {
-          final index = navigationShell.currentIndex;
-          return BlocListener<SettingsBloc, SettingsState>(
-            listenWhen: (p, c) => p.workMinutes != c.workMinutes,
-            listener: (context, _) {
+      child: _AppShellLifecycle(navigationShell: navigationShell),
+    );
+  }
+}
+
+/// Owns app lifecycle → FocusBloc so overdue finish works on any tab.
+class _AppShellLifecycle extends StatefulWidget {
+  const _AppShellLifecycle({required this.navigationShell});
+
+  final StatefulNavigationShell navigationShell;
+
+  @override
+  State<_AppShellLifecycle> createState() => _AppShellLifecycleState();
+}
+
+class _AppShellLifecycleState extends State<_AppShellLifecycle>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!mounted) return;
+    context.read<FocusBloc>().add(FocusLifecycleChanged(state));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final navigationShell = widget.navigationShell;
+    final index = navigationShell.currentIndex;
+    return BlocListener<SettingsBloc, SettingsState>(
+      listenWhen: (p, c) =>
+          p.workMinutes != c.workMinutes || p.soundPack != c.soundPack,
+      listener: (context, _) {
+        context.read<FocusBloc>().add(const FocusStarted());
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        body: navigationShell,
+        bottomNavigationBar: _PulseBottomBar(
+          currentIndex: index,
+          onSelect: (i) {
+            navigationShell.goBranch(i);
+            if (i == 0) {
+              context.read<TodayBloc>().add(const TodayGreetingRolled());
+            } else if (i == 1) {
               context.read<FocusBloc>().add(const FocusStarted());
-            },
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              extendBody: true,
-              body: navigationShell,
-              bottomNavigationBar: _PulseBottomBar(
-                currentIndex: index,
-                onSelect: (i) {
-                  navigationShell.goBranch(i);
-                  // IndexedStack keeps tabs alive — refresh stale screens.
-                  if (i == 0) {
-                    context
-                        .read<TodayBloc>()
-                        .add(const TodayGreetingRolled());
-                  } else if (i == 1) {
-                    context.read<FocusBloc>().add(const FocusStarted());
-                  } else if (i == 2) {
-                    context
-                        .read<InsightsBloc>()
-                        .add(const InsightsStarted());
-                  }
-                },
-                onAdd: index == 0
-                    ? () => showHabitEditorSheet(context)
-                    : null,
-              ),
-            ),
-          );
-        },
+            } else if (i == 2) {
+              context.read<InsightsBloc>().add(const InsightsStarted());
+            }
+          },
+          onAdd: index == 0 ? () => showHabitEditorSheet(context) : null,
+        ),
       ),
     );
   }

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:equatable/equatable.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:live_activities/models/alert_config.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:pulse/features/focus/data/focus_background_alerts.dart';
@@ -67,7 +65,26 @@ class FocusTimerReset extends FocusEvent {
 }
 
 class FocusTimerFinished extends FocusEvent {
-  const FocusTimerFinished();
+  const FocusTimerFinished({this.playCompletionSound = true});
+
+  /// False when iOS already played the completion notification chime.
+  final bool playCompletionSound;
+
+  @override
+  List<Object?> get props => [playCompletionSound];
+}
+
+/// App returned to foreground — finish if the wall-clock deadline already passed.
+class FocusAppResumed extends FocusEvent {
+  const FocusAppResumed();
+}
+
+/// Shell-wide lifecycle so overdue finish works even off the Focus tab.
+class FocusLifecycleChanged extends FocusEvent {
+  const FocusLifecycleChanged(this.lifecycle);
+  final AppLifecycleState lifecycle;
+  @override
+  List<Object?> get props => [lifecycle];
 }
 
 class FocusTick extends FocusEvent {
@@ -97,7 +114,7 @@ class FocusState extends Equatable {
   final int todayMinutes;
   final DateTime? sessionStartedAt;
   final String? sessionQuote;
-  /// Optional user label for this focus block (e.g. "Write README").
+  /// Optional user label for this focus block.
   final String sessionTitle;
 
   double get progress {
@@ -181,7 +198,16 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     on<FocusTimerReset>(_onReset);
     on<FocusTick>(_onTick);
     on<FocusTimerFinished>(_onFinished);
+    on<FocusAppResumed>(_onAppResumed);
+    on<FocusLifecycleChanged>(_onLifecycle);
+    FocusBackgroundAlerts.ensureNativeCompleteHandler();
     _liveActionSub = _liveActivity.actions.listen(_onLiveAction);
+    _nativeCompleteSub =
+        FocusBackgroundAlerts.nativeCompletes.listen((shouldPlaySound) {
+      if (state.sessionStartedAt != null && !state.isCompleted) {
+        add(FocusTimerFinished(playCompletionSound: shouldPlaySound));
+      }
+    });
   }
 
   final SettingsRepository _settings;
@@ -192,7 +218,10 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   final _uuid = const Uuid();
   Timer? _timer;
   StreamSubscription<FocusLiveAction>? _liveActionSub;
+  StreamSubscription<bool>? _nativeCompleteSub;
   bool _didWarnTenSeconds = false;
+  bool _finishing = false;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
 
   /// Shared wall-clock deadline for the in-app timer and Live Activity.
   DateTime? _segmentEndsAt;
@@ -200,7 +229,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   int? _pausedRemainingMs;
   int _lastAnnouncedSecond = -1;
 
-  String get _liveLine => state.sessionHeadline;
+  String get _liveLine => state.sessionQuote ?? 'Stay with it';
 
   String get _islandTitle {
     final title = state.sessionTitle.trim();
@@ -270,7 +299,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     }
     final seconds = state.mode == FocusMode.pomodoro
         ? _settings.workMinutes * 60
-        : 60 * 60;
+        : _settings.freeMinutes * 60;
     emit(
       state.copyWith(
         totalSeconds: seconds,
@@ -293,7 +322,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     await _liveActivity.end();
     final seconds = event.mode == FocusMode.pomodoro
         ? _settings.workMinutes * 60
-        : 60 * 60;
+        : _settings.freeMinutes * 60;
     emit(
       state.copyWith(
         mode: event.mode,
@@ -313,8 +342,11 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   ) async {
     if (state.isRunning || state.sessionStartedAt != null) return;
     final minutes = event.minutes.clamp(1, 120);
-    await _settings.setWorkMinutes(minutes);
-    if (state.mode != FocusMode.pomodoro) return;
+    if (state.mode == FocusMode.pomodoro) {
+      await _settings.setWorkMinutes(minutes);
+    } else {
+      await _settings.setFreeMinutes(minutes);
+    }
     final seconds = minutes * 60;
     emit(
       state.copyWith(
@@ -339,6 +371,11 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     FocusTimerStarted event,
     Emitter<FocusState> emit,
   ) async {
+    if (state.isRunning || state.isCompleted || state.sessionStartedAt != null) {
+      return;
+    }
+    if (state.remainingSeconds <= 0) return;
+
     if (_settings.hapticsEnabled) {
       HapticFeedback.mediumImpact();
     }
@@ -362,7 +399,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         sessionQuote: quote,
       ),
     );
-    final liveLine = state.sessionHeadline;
+    final liveLine = quote;
     await FocusTimerSounds.warmUp(_settings.soundPack);
     await _liveActivity.start(
       quote: liveLine,
@@ -471,6 +508,9 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       _timer?.cancel();
       _segmentEndsAt = null;
       _pausedRemainingMs = null;
+      if (state.remainingSeconds != 0) {
+        emit(state.copyWith(remainingSeconds: 0));
+      }
       add(const FocusTimerFinished());
       return;
     }
@@ -488,28 +528,26 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
   }
 
   Future<void> _announceSecond(int remaining) async {
-    AlertConfig? islandAlert;
+    // Visual LA push only — no ActivityKit AlertConfig (that plays a system chime).
     var shouldPushLiveActivity = false;
+    final appActive = _lifecycle == AppLifecycleState.resumed;
 
     if (remaining == 10 || (remaining < 10 && !_didWarnTenSeconds)) {
       _didWarnTenSeconds = true;
       shouldPushLiveActivity = true;
-      if (_warningOn) {
-        islandAlert = AlertConfig(
-          title: 'Almost done',
-          body: '10 seconds left',
-        );
+      // Flutter warn when foreground; native alarm covers background.
+      if (_warningOn && appActive) {
         await FocusTimerSounds.warningAlert(_settings.soundPack);
       }
-      if (_settings.hapticsEnabled) {
+      if (_settings.hapticsEnabled && appActive) {
         await HapticFeedback.mediumImpact();
       }
     } else if (remaining < 10) {
-      final osOwnsTicks = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
-      if (_ticksOn && !osOwnsTicks) {
+      // Flutter ticks only while resumed — native ticks cover lock screen.
+      if (_ticksOn && appActive) {
         await FocusTimerSounds.warningTick(_settings.soundPack);
       }
-      if (_settings.hapticsEnabled) {
+      if (_settings.hapticsEnabled && appActive) {
         await HapticFeedback.selectionClick();
       }
     }
@@ -522,7 +560,6 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         totalSeconds: state.totalSeconds,
         isPaused: false,
         endsAt: _segmentEndsAt,
-        alert: islandAlert,
       );
     }
   }
@@ -531,55 +568,87 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     FocusTimerFinished event,
     Emitter<FocusState> emit,
   ) async {
+    if (_finishing || state.isCompleted) return;
+    _finishing = true;
     _timer?.cancel();
     _segmentEndsAt = null;
     _pausedRemainingMs = null;
     _lastAnnouncedSecond = -1;
-    await FocusBackgroundAlerts.cancel();
-    if (_completionOn) {
-      await FocusTimerSounds.completed(_settings.soundPack);
+
+    try {
+      // Kill native cues first so OS alarms/notifs can't double the chime.
+      await FocusBackgroundAlerts.cancel();
+
+      if (_completionOn && event.playCompletionSound) {
+        try {
+          await FocusTimerSounds.completed(_settings.soundPack);
+        } catch (error, stack) {
+          debugPrint('Focus completion sound failed: $error\n$stack');
+        }
+      }
+      if (_settings.hapticsEnabled) {
+        await HapticFeedback.heavyImpact();
+      }
+
+      await _liveActivity.end(
+        quote: _liveLine,
+        completionAlert: null,
+      );
+      final fromTimer =
+          (state.totalSeconds - state.remainingSeconds).clamp(0, state.totalSeconds);
+      // Natural end (≤1s left) counts as the full planned block.
+      final naturalEnd = state.remainingSeconds <= 1;
+      final actual = naturalEnd ? state.totalSeconds : fromTimer;
+      final started = state.sessionStartedAt ?? DateTime.now();
+      await _saveFocusSession(
+        FocusSession(
+          id: _uuid.v4(),
+          plannedSeconds: state.totalSeconds,
+          completedSeconds: actual,
+          mode: state.mode.name,
+          completed: naturalEnd,
+          startedAt: started,
+          endedAt: DateTime.now(),
+        ),
+      );
+      final today = await _getTodayFocusMinutes();
+      emit(
+        state.copyWith(
+          remainingSeconds: 0,
+          elapsedSeconds: actual,
+          isRunning: false,
+          isCompleted: true,
+          todayMinutes: today,
+        ),
+      );
+      await _homeWidgetSync.sync();
+    } finally {
+      _finishing = false;
     }
-    if (_settings.hapticsEnabled) {
-      await HapticFeedback.heavyImpact();
+  }
+
+  Future<void> _onAppResumed(
+    FocusAppResumed event,
+    Emitter<FocusState> emit,
+  ) async {
+    _lifecycle = AppLifecycleState.resumed;
+    if (state.isCompleted || state.sessionStartedAt == null) return;
+    if (!state.isRunning && _pausedRemainingMs != null) return;
+    final remaining = _remainingFromDeadline();
+    if (remaining <= 0) {
+      // Native/background likely already chimed — don't replay.
+      add(const FocusTimerFinished(playCompletionSound: false));
     }
-    await _liveActivity.end(
-      quote: _liveLine,
-      completionAlert: _completionOn
-          ? AlertConfig(
-              title: 'Focus complete',
-              body: _liveLine,
-            )
-          : null,
-    );
-    // Timer-based elapsed excludes paused time; clamp to planned length.
-    final fromTimer =
-        (state.totalSeconds - state.remainingSeconds).clamp(0, state.totalSeconds);
-    // Natural end (≤1s left) counts as the full planned block.
-    final actual =
-        state.remainingSeconds <= 1 ? state.totalSeconds : fromTimer;
-    final started = state.sessionStartedAt ?? DateTime.now();
-    await _saveFocusSession(
-      FocusSession(
-        id: _uuid.v4(),
-        plannedSeconds: state.totalSeconds,
-        completedSeconds: actual,
-        mode: state.mode.name,
-        completed: true,
-        startedAt: started,
-        endedAt: DateTime.now(),
-      ),
-    );
-    final today = await _getTodayFocusMinutes();
-    emit(
-      state.copyWith(
-        remainingSeconds: 0,
-        elapsedSeconds: actual,
-        isRunning: false,
-        isCompleted: true,
-        todayMinutes: today,
-      ),
-    );
-    await _homeWidgetSync.sync();
+  }
+
+  Future<void> _onLifecycle(
+    FocusLifecycleChanged event,
+    Emitter<FocusState> emit,
+  ) async {
+    _lifecycle = event.lifecycle;
+    if (event.lifecycle == AppLifecycleState.resumed) {
+      add(const FocusAppResumed());
+    }
   }
 
   @override
@@ -587,6 +656,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _timer?.cancel();
     _segmentEndsAt = null;
     await _liveActionSub?.cancel();
+    await _nativeCompleteSub?.cancel();
     await _liveActivity.end();
     return super.close();
   }

@@ -15,6 +15,7 @@ class SettingsRepository {
   static const _focusTickSoundKey = 'focus_tick_sound_enabled';
   static const _soundPackKey = 'focus_sound_pack';
   static const _workMinutesKey = 'work_minutes';
+  static const _freeMinutesKey = 'free_minutes';
   static const _breakMinutesKey = 'break_minutes';
   static const _userNameKey = 'user_name';
 
@@ -56,10 +57,17 @@ class SettingsRepository {
   Future<void> setSoundPack(FocusSoundPack pack) =>
       _prefs.setString(_soundPackKey, pack.storageValue);
 
+  /// Pomodoro length in minutes. Special case: `1` means a 60-second sprint.
   int get workMinutes => _prefs.getInt(_workMinutesKey) ?? 25;
 
   Future<void> setWorkMinutes(int value) =>
       _prefs.setInt(_workMinutesKey, value);
+
+  /// Free-focus length in minutes (default one quiet hour).
+  int get freeMinutes => _prefs.getInt(_freeMinutesKey) ?? 60;
+
+  Future<void> setFreeMinutes(int value) =>
+      _prefs.setInt(_freeMinutesKey, value);
 
   int get breakMinutes => _prefs.getInt(_breakMinutesKey) ?? 5;
 
@@ -84,6 +92,7 @@ class SettingsRepository {
         'focusTickSoundEnabled': focusTickSoundEnabled,
         'soundPack': soundPack.storageValue,
         'workMinutes': workMinutes,
+        'freeMinutes': freeMinutes,
         'breakMinutes': breakMinutes,
         'userName': userName,
       };
@@ -126,6 +135,10 @@ class SettingsRepository {
     final work = map['workMinutes'];
     if (work is int) {
       await setWorkMinutes(work);
+    }
+    final free = map['freeMinutes'];
+    if (free is int) {
+      await setFreeMinutes(free);
     }
     final breakMins = map['breakMinutes'];
     if (breakMins is int) {

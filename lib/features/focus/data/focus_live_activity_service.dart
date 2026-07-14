@@ -62,6 +62,10 @@ class FocusLiveActivityService {
       );
       _listenUrlActions();
       await _listenAndroidActions();
+      // Clear orphaned activities from a previous killed process.
+      try {
+        await _plugin.endAllActivities();
+      } catch (_) {}
       _initialized = true;
     } catch (error, stack) {
       debugPrint('FocusLiveActivity init failed: $error\n$stack');
@@ -274,17 +278,10 @@ class FocusLiveActivityService {
         'FocusLiveActivity started on Dynamic Island id=$_systemActivityId',
       );
 
-      // Brief island presentation so the timer is obvious at session start.
+      // Brief visual refresh only — AlertConfig would play a system chime.
       final systemId = _systemActivityId;
       if (systemId != null) {
-        await _plugin.updateActivity(
-          systemId,
-          data,
-          AlertConfig(
-            title: 'Pulse Focus',
-            body: quote,
-          ),
-        );
+        await _plugin.updateActivity(systemId, data);
       }
     } catch (error, stack) {
       debugPrint('FocusLiveActivity start failed: $error\n$stack');
@@ -324,7 +321,11 @@ class FocusLiveActivityService {
     String? title,
     AlertConfig? alert,
   }) async {
-    if (!_active) return;
+    if (!_active) {
+      await _resolveSystemActivityId();
+      if (_systemActivityId == null) return;
+      _active = true;
+    }
 
     if (!isPaused && endsAt != null) {
       final endMs = endsAt.millisecondsSinceEpoch;
@@ -376,14 +377,9 @@ class FocusLiveActivityService {
   }
 
   Future<void> end({AlertConfig? completionAlert, String? quote}) async {
-    if (!_active && _systemActivityId == null) {
-      await FocusBackgroundAlerts.cancel();
-      return;
-    }
-
     try {
       await FocusBackgroundAlerts.cancel();
-      if (completionAlert != null) {
+      if (completionAlert != null && (_active || _systemActivityId != null)) {
         await _resolveSystemActivityId();
         final systemId = _systemActivityId;
         if (systemId != null) {
@@ -408,8 +404,13 @@ class FocusLiveActivityService {
         await _plugin.endActivity(_systemActivityId!);
       }
       await _plugin.endActivity(activityId);
+      // Safety net — dismiss any orphaned ActivityKit sessions.
+      await _plugin.endAllActivities();
     } catch (error) {
       debugPrint('FocusLiveActivity end failed: $error');
+      try {
+        await _plugin.endAllActivities();
+      } catch (_) {}
     }
 
     _active = false;

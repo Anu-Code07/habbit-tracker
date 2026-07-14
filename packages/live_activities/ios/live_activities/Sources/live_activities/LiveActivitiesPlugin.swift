@@ -43,6 +43,16 @@ public class LiveActivitiesPlugin: NSObject, FlutterPlugin, FlutterStreamHandler
   private var appLifecycleLiveActivityIds = [String]()
   private var activityEventSink: FlutterEventSink?
   private var pushToStartTokenEventSink: FlutterEventSink?
+
+  /// Ends every Pulse focus Live Activity immediately (safe to call from AppDelegate).
+  @objc public static func endAllLiveActivitiesImmediately() {
+    guard #available(iOS 16.1, *) else { return }
+    Task {
+      for activity in Activity<LiveActivitiesAppAttributes>.activities {
+        await activity.end(dismissalPolicy: .immediate)
+      }
+    }
+  }
   
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "live_activities", binaryMessenger: registrar.messenger())

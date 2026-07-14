@@ -67,18 +67,23 @@ class InsightsBloc extends Bloc<InsightsEvent, InsightsState> {
     InsightsStarted event,
     Emitter<InsightsState> emit,
   ) async {
-    emit(const InsightsLoading());
+    // Keep existing content visible on tab revisits — avoid skeleton flash.
+    if (state is! InsightsSuccess) {
+      emit(const InsightsLoading());
+    }
     try {
       final stats = await _getWeekHabitStats();
       final sessions = await _getWeekFocusSessions();
       final minutes = sessions.fold<int>(
             0,
             (sum, s) => sum + s.completedSeconds,
-         ) ~/
+          ) ~/
           60;
       emit(InsightsSuccess(weekStats: stats, focusMinutes: minutes));
     } catch (_) {
-      emit(const InsightsError('Could not load insights.'));
+      if (state is! InsightsSuccess) {
+        emit(const InsightsError('Could not load insights.'));
+      }
     }
   }
 }

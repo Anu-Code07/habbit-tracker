@@ -1,6 +1,9 @@
+import ActivityKit
+import AVFoundation
 import Flutter
 import UIKit
 import UserNotifications
+import live_activities
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -8,6 +11,13 @@ import UserNotifications
   private let completeId = "pulse.focus.complete"
   private let tickIdPrefix = "pulse.focus.tick."
   private var alertsChannel: FlutterMethodChannel?
+
+  private var focusEndAt: Date?
+  private var endLiveActivityWork: DispatchWorkItem?
+  private var focusBgTask: UIBackgroundTaskIdentifier = .invalid
+  private var soundPack: String = "soft"
+  private var completionEnabled: Bool = true
+  private var cuePlayer: AVAudioPlayer?
 
   override func application(
     _ application: UIApplication,
@@ -18,15 +28,31 @@ import UserNotifications
     UNUserNotificationCenter.current().requestAuthorization(
       options: [.alert, .sound, .badge]
     ) { _, _ in }
+    prepareAudioSession()
 
     let ok = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     setupFocusAlertsChannel()
     return ok
   }
 
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    super.applicationDidEnterBackground(application)
+    guard let end = focusEndAt else { return }
+    let remaining = end.timeIntervalSinceNow
+    guard remaining > 0, remaining <= 32 else { return }
+    beginFocusBackgroundTaskIfNeeded()
+  }
+
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    super.applicationWillEnterForeground(application)
+    if let end = focusEndAt, end.timeIntervalSinceNow <= 0 {
+      dismissFocusLiveActivityAndNotifyFlutter(playNativeComplete: true)
+    }
+    endFocusBackgroundTaskIfNeeded()
+  }
+
   private func setupFocusAlertsChannel() {
     guard let controller = window?.rootViewController as? FlutterViewController else {
-      // Scene-based Flutter may attach later.
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
         self?.setupFocusAlertsChannel()
       }
@@ -53,6 +79,7 @@ import UserNotifications
         let warningEnabled = args["warningEnabled"] as? Bool ?? true
         let ticksEnabled = args["ticksEnabled"] as? Bool ?? true
         let completionEnabled = args["completionEnabled"] as? Bool ?? true
+        let pack = args["soundPack"] as? String ?? "soft"
         self.scheduleFocusAlerts(
           remainingSeconds: remaining,
           endAtMs: endAtMs,
@@ -60,7 +87,8 @@ import UserNotifications
           paused: paused,
           warningEnabled: warningEnabled,
           ticksEnabled: ticksEnabled,
-          completionEnabled: completionEnabled
+          completionEnabled: completionEnabled,
+          soundPack: pack
         )
         result(nil)
       case "cancel":
@@ -79,6 +107,10 @@ import UserNotifications
     }
     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ids)
+    endLiveActivityWork?.cancel()
+    endLiveActivityWork = nil
+    focusEndAt = nil
+    endFocusBackgroundTaskIfNeeded()
   }
 
   private func scheduleFocusAlerts(
@@ -88,10 +120,13 @@ import UserNotifications
     paused: Bool,
     warningEnabled: Bool,
     ticksEnabled: Bool,
-    completionEnabled: Bool
+    completionEnabled: Bool,
+    soundPack: String
   ) {
     cancelFocusAlerts()
-    guard !paused, remainingSeconds > 0 else { return }
+    self.soundPack = soundPack
+    self.completionEnabled = completionEnabled && soundPack != "silent"
+    guard !paused, remainingSeconds > 0, soundPack != "silent" else { return }
 
     let now = Date().timeIntervalSince1970
     let end: Date
@@ -100,7 +135,10 @@ import UserNotifications
     } else {
       end = Date().addingTimeInterval(remainingSeconds)
     }
+    focusEndAt = end
+    scheduleLiveActivityDismiss(at: end)
 
+    // Flutter plays ticks in the foreground; OS schedules cover lock/suspend.
     if warningEnabled && remainingSeconds > 10 {
       let warnAt = end.addingTimeInterval(-10)
       if warnAt.timeIntervalSinceNow > 0.4 {
@@ -109,12 +147,11 @@ import UserNotifications
           title: "Almost done",
           body: quote.isEmpty ? "10 seconds left" : "\(quote) · 10 seconds left",
           at: warnAt,
-          tick: false
+          kind: .warning
         )
       }
     }
 
-    // Ticks for remaining 9..1 (sound-only when app is foregrounded).
     if ticksEnabled {
       for secLeft in 1...9 {
         guard remainingSeconds > Double(secLeft) else { continue }
@@ -125,19 +162,114 @@ import UserNotifications
           title: "Focus",
           body: "\(secLeft)s",
           at: tickAt,
-          tick: true
+          kind: .tick
         )
       }
     }
 
-    if completionEnabled && end.timeIntervalSinceNow > 0.4 {
+    if self.completionEnabled && end.timeIntervalSinceNow > 0.4 {
       schedule(
         id: completeId,
         title: "Focus complete",
         body: quote.isEmpty ? "Nice work — session finished" : quote,
         at: end,
-        tick: false
+        kind: .complete
       )
+    }
+  }
+
+  private enum CueKind { case tick, warning, complete }
+
+  private func scheduleLiveActivityDismiss(at end: Date) {
+    endLiveActivityWork?.cancel()
+    let work = DispatchWorkItem { [weak self] in
+      self?.dismissFocusLiveActivityAndNotifyFlutter(playNativeComplete: true)
+    }
+    endLiveActivityWork = work
+    // After the chime window so sound and dismiss feel paired.
+    let delay = max(end.timeIntervalSinceNow + 0.35, 0.25)
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+  }
+
+  private func dismissFocusLiveActivityAndNotifyFlutter(playNativeComplete: Bool) {
+    endLiveActivityWork?.cancel()
+    endLiveActivityWork = nil
+    if playNativeComplete && completionEnabled {
+      playBundledCue(.complete)
+    }
+    if #available(iOS 16.1, *) {
+      LiveActivitiesPlugin.endAllLiveActivitiesImmediately()
+    }
+    alertsChannel?.invokeMethod(
+      "focusNativeComplete",
+      arguments: ["nativePlayed": playNativeComplete]
+    )
+    focusEndAt = nil
+    endFocusBackgroundTaskIfNeeded()
+  }
+
+  private func beginFocusBackgroundTaskIfNeeded() {
+    guard focusBgTask == .invalid else { return }
+    focusBgTask = UIApplication.shared.beginBackgroundTask(withName: "pulse.focus.end") { [weak self] in
+      self?.endFocusBackgroundTaskIfNeeded()
+    }
+  }
+
+  private func endFocusBackgroundTaskIfNeeded() {
+    guard focusBgTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(focusBgTask)
+    focusBgTask = .invalid
+  }
+
+  private func prepareAudioSession() {
+    do {
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+      try session.setActive(true, options: [])
+    } catch {
+      NSLog("Pulse audio session failed: \(error)")
+    }
+  }
+
+  private func soundFileName(for kind: CueKind) -> String {
+    let wood = soundPack == "wood"
+    switch kind {
+    case .tick:
+      return wood ? "focus_tick_wood.wav" : "focus_tick.wav"
+    case .warning:
+      return wood ? "focus_warning_wood.wav" : "focus_warning.wav"
+    case .complete:
+      return wood ? "focus_complete_wood.wav" : "focus_complete.wav"
+    }
+  }
+
+  private func notificationSound(for kind: CueKind) -> UNNotificationSound {
+    let name = soundFileName(for: kind)
+    if Bundle.main.url(forResource: name.replacingOccurrences(of: ".wav", with: ""), withExtension: "wav") != nil
+        || Bundle.main.url(forResource: name, withExtension: nil) != nil {
+      return UNNotificationSound(named: UNNotificationSoundName(name))
+    }
+    return .default
+  }
+
+  /// Plays even when the mute switch is on (playback session).
+  private func playBundledCue(_ kind: CueKind) {
+    prepareAudioSession()
+    let name = soundFileName(for: kind)
+    let base = name.replacingOccurrences(of: ".wav", with: "")
+    guard let url = Bundle.main.url(forResource: base, withExtension: "wav")
+            ?? Bundle.main.url(forResource: name, withExtension: nil) else {
+      NSLog("Pulse cue missing in bundle: \(name)")
+      return
+    }
+    do {
+      cuePlayer?.stop()
+      cuePlayer = try AVAudioPlayer(contentsOf: url)
+      cuePlayer?.prepareToPlay()
+      cuePlayer?.volume = 1.0
+      cuePlayer?.play()
+    } catch {
+      NSLog("Pulse cue play failed: \(error)")
     }
   }
 
@@ -146,14 +278,14 @@ import UserNotifications
     title: String,
     body: String,
     at date: Date,
-    tick: Bool
+    kind: CueKind
   ) {
     let content = UNMutableNotificationContent()
     content.title = title
     content.body = body
-    content.sound = .default
+    content.sound = notificationSound(for: kind)
     if #available(iOS 15.0, *) {
-      content.interruptionLevel = tick ? .passive : .timeSensitive
+      content.interruptionLevel = kind == .tick ? .passive : .timeSensitive
     }
 
     let seconds = max(date.timeIntervalSinceNow, 0.5)
@@ -162,18 +294,41 @@ import UserNotifications
     UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
   }
 
-  // Show banners even when Pulse is in foreground so QA can hear/see alerts.
-  // Tick cues stay sound-only to avoid a banner every second.
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    let isTick = notification.request.identifier.hasPrefix(tickIdPrefix)
+    let id = notification.request.identifier
+    let isTick = id.hasPrefix(tickIdPrefix)
+    if id == completeId {
+      // Flutter owns the foreground chime (pack WAV). Avoid stacking system sound.
+      dismissFocusLiveActivityAndNotifyFlutter(playNativeComplete: false)
+      if #available(iOS 14.0, *) {
+        completionHandler([.banner, .list])
+      } else {
+        completionHandler([.alert])
+      }
+      return
+    }
+    if isTick {
+      // Flutter ticker owns foreground ticks — skip notification sound.
+      completionHandler([])
+      return
+    }
+    if id == warnId {
+      // Flutter plays the pack warning in-app; keep a quiet banner only.
+      if #available(iOS 14.0, *) {
+        completionHandler([.banner, .list])
+      } else {
+        completionHandler([.alert])
+      }
+      return
+    }
     if #available(iOS 14.0, *) {
-      completionHandler(isTick ? [.sound] : [.banner, .list, .sound])
+      completionHandler([.banner, .list, .sound])
     } else {
-      completionHandler(isTick ? [.sound] : [.alert, .sound])
+      completionHandler([.alert, .sound])
     }
   }
 }

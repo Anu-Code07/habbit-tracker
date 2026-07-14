@@ -43,7 +43,7 @@ struct PulseFocusLiveActivity: Widget {
             context: context,
             sharedDefault: sharedDefault,
             compact: true,
-            scheme: .dark
+            onDarkIsland: true
           )
         }
       } compactLeading: {
@@ -73,43 +73,54 @@ private struct LockScreenLiveView: View {
   let context: ActivityViewContext<LiveActivitiesAppAttributes>
   let sharedDefault: UserDefaults?
 
-  @Environment(\.colorScheme) private var colorScheme
-
   var body: some View {
-    let palette = PulseLivePalette.lock(colorScheme)
-    let warning = PulseLiveContent.isWarning(context: context, sharedDefault: sharedDefault)
-
-    VStack(spacing: 12) {
-      HStack(alignment: .top, spacing: 12) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(PulseLiveContent.title(context: context, sharedDefault: sharedDefault))
-            .font(.headline.weight(.semibold))
-            .foregroundColor(palette.ink)
-          Text(PulseLiveContent.quoteLine(context: context, sharedDefault: sharedDefault))
-            .font(.caption.weight(.medium))
-            .foregroundColor(palette.muted)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        Spacer(minLength: 8)
-        RemainingText(context: context, sharedDefault: sharedDefault)
-          .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
-          .foregroundColor(palette.ink)
-          .minimumScaleFactor(0.7)
-          .lineLimit(1)
-      }
-
-      ControlButtons(
+    // Re-evaluate after 0:00 so Pause/Finish drop even if Flutter is suspended.
+    TimelineView(.periodic(from: .now, by: 1)) { timeline in
+      let palette = PulseLivePalette.lock
+      let warning = PulseLiveContent.isWarning(context: context, sharedDefault: sharedDefault)
+      let finished = PulseLiveContent.isFinished(
         context: context,
         sharedDefault: sharedDefault,
-        compact: false,
-        scheme: colorScheme
+        now: timeline.date
       )
+
+      VStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text(PulseLiveContent.title(context: context, sharedDefault: sharedDefault))
+              .font(.headline.weight(.semibold))
+              .foregroundColor(palette.ink)
+            Text(
+              finished
+                ? "Session complete"
+                : PulseLiveContent.quoteLine(context: context, sharedDefault: sharedDefault)
+            )
+              .font(.caption.weight(.medium))
+              .foregroundColor(palette.muted)
+              .lineLimit(2)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          Spacer(minLength: 8)
+          RemainingText(context: context, sharedDefault: sharedDefault)
+            .font(.system(size: 32, weight: .bold, design: .rounded).monospacedDigit())
+            .foregroundColor(palette.ink)
+            .minimumScaleFactor(0.7)
+            .lineLimit(1)
+        }
+
+        if !finished {
+          ControlButtons(
+            context: context,
+            sharedDefault: sharedDefault,
+            compact: false
+          )
+        }
+      }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 14)
+      .activityBackgroundTint(palette.tint(warning: warning))
+      .activitySystemActionForegroundColor(palette.ink)
     }
-    .padding(.horizontal, 18)
-    .padding(.vertical, 14)
-    .activityBackgroundTint(palette.tint(warning: warning))
-    .activitySystemActionForegroundColor(palette.ink)
   }
 }
 
@@ -117,25 +128,44 @@ private struct ControlButtons: View {
   let context: ActivityViewContext<LiveActivitiesAppAttributes>
   let sharedDefault: UserDefaults?
   let compact: Bool
-  let scheme: ColorScheme
+  /// Dynamic Island stays dark; lock screen uses light mint chips.
+  var onDarkIsland: Bool = false
 
   var body: some View {
     let paused = PulseLiveContent.isPaused(context: context, sharedDefault: sharedDefault)
     HStack(spacing: 10) {
       if paused {
         Link(destination: URL(string: "pulse://focus/resume")!) {
-          ControlChip(title: "Resume", systemImage: "play.fill", filled: true, compact: compact, scheme: scheme)
+          ControlChip(
+            title: "Resume",
+            systemImage: "play.fill",
+            filled: true,
+            compact: compact,
+            onDarkIsland: onDarkIsland
+          )
         }
         .buttonStyle(.plain)
       } else {
         Link(destination: URL(string: "pulse://focus/pause")!) {
-          ControlChip(title: "Pause", systemImage: "pause.fill", filled: false, compact: compact, scheme: scheme)
+          ControlChip(
+            title: "Pause",
+            systemImage: "pause.fill",
+            filled: false,
+            compact: compact,
+            onDarkIsland: onDarkIsland
+          )
         }
         .buttonStyle(.plain)
       }
 
       Link(destination: URL(string: "pulse://focus/finish")!) {
-        ControlChip(title: "Finish", systemImage: "checkmark", filled: true, compact: compact, scheme: scheme)
+        ControlChip(
+          title: "Finish",
+          systemImage: "checkmark",
+          filled: true,
+          compact: compact,
+          onDarkIsland: onDarkIsland
+        )
       }
       .buttonStyle(.plain)
     }
@@ -147,17 +177,17 @@ private struct ControlChip: View {
   let systemImage: String
   let filled: Bool
   let compact: Bool
-  let scheme: ColorScheme
+  var onDarkIsland: Bool = false
 
   var body: some View {
-    let palette = PulseLivePalette.lock(scheme)
+    let palette = PulseLivePalette.lock
     HStack(spacing: 6) {
       Image(systemName: systemImage)
         .font(.system(size: compact ? 12 : 13, weight: .semibold))
       Text(title)
         .font(.system(size: compact ? 13 : 14, weight: .semibold))
     }
-    .foregroundColor(filled ? Color(red: 0.05, green: 0.06, blue: 0.05) : palette.ink)
+    .foregroundColor(filled ? Color(red: 0.05, green: 0.06, blue: 0.05) : (onDarkIsland ? .white : palette.ink))
     .frame(maxWidth: .infinity)
     .padding(.vertical, compact ? 8 : 10)
     .background(
@@ -165,7 +195,7 @@ private struct ControlChip: View {
         .fill(
           filled
             ? Color(red: 0.62, green: 0.91, blue: 0.44)
-            : (scheme == .dark ? Color.white.opacity(0.16) : Color.white.opacity(0.72))
+            : (onDarkIsland ? Color.white.opacity(0.16) : Color.white.opacity(0.72))
         )
     )
   }
@@ -189,6 +219,13 @@ private struct RemainingText: View {
       Text(timerInterval: intervalStart...end, countsDown: true)
         .monospacedDigit()
         .multilineTextAlignment(.trailing)
+    } else if PulseLiveContent.isFinished(
+      context: context,
+      sharedDefault: sharedDefault
+    ) {
+      Text("0:00")
+        .monospacedDigit()
+        .multilineTextAlignment(.trailing)
     } else {
       Text(PulseLiveContent.fallbackRemaining(context: context, sharedDefault: sharedDefault))
     }
@@ -196,20 +233,17 @@ private struct RemainingText: View {
 }
 
 private enum PulseLivePalette {
-  case lock(ColorScheme)
+  /// Soft mint lock screen — fixed light, never dark green.
+  case lock
   case island
 
   func tint(warning: Bool) -> Color {
     switch self {
-    case .lock(let scheme):
+    case .lock:
       if warning {
-        return scheme == .dark
-          ? Color(red: 0.32, green: 0.20, blue: 0.08)
-          : Color(red: 1.0, green: 0.93, blue: 0.84)
+        return Color(red: 1.0, green: 0.93, blue: 0.84)
       }
-      return scheme == .dark
-        ? Color(red: 0.10, green: 0.18, blue: 0.11)
-        : Color(red: 0.89, green: 0.96, blue: 0.84)
+      return Color(red: 0.89, green: 0.96, blue: 0.84)
     case .island:
       return .clear
     }
@@ -217,10 +251,8 @@ private enum PulseLivePalette {
 
   var ink: Color {
     switch self {
-    case .lock(let scheme):
-      return scheme == .dark
-        ? Color(red: 0.95, green: 0.96, blue: 0.94)
-        : Color(red: 0.05, green: 0.06, blue: 0.05)
+    case .lock:
+      return Color(red: 0.05, green: 0.06, blue: 0.05)
     case .island:
       return .white
     }
@@ -228,10 +260,8 @@ private enum PulseLivePalette {
 
   var muted: Color {
     switch self {
-    case .lock(let scheme):
-      return scheme == .dark
-        ? Color(red: 0.70, green: 0.73, blue: 0.68)
-        : Color(red: 0.27, green: 0.28, blue: 0.27)
+    case .lock:
+      return Color(red: 0.27, green: 0.28, blue: 0.27)
     case .island:
       return Color.white.opacity(0.8)
     }
@@ -321,6 +351,21 @@ private enum PulseLiveContent {
     sharedDefault: UserDefaults?
   ) -> Bool {
     string(context, sharedDefault, "status") == "paused"
+  }
+
+  static func isFinished(
+    context: ActivityViewContext<LiveActivitiesAppAttributes>,
+    sharedDefault: UserDefaults?,
+    now: Date = Date()
+  ) -> Bool {
+    if isPaused(context: context, sharedDefault: sharedDefault) { return false }
+    if let end = endDate(context: context, sharedDefault: sharedDefault), end <= now {
+      return true
+    }
+    if let remaining = number(context, sharedDefault, "remainingSeconds") {
+      return remaining <= 0
+    }
+    return false
   }
 
   static func fallbackRemaining(

@@ -1,6 +1,6 @@
 import 'dart:math';
 
-/// Short calm lines for a focus session — one quote per timer.
+/// Short calm lines for a focus session — one quote per timer / finish moment.
 abstract final class PulseFocusQuotes {
   static String? _last;
 
@@ -35,6 +35,36 @@ abstract final class PulseFocusQuotes {
     'Hold the line gently',
     'This is your quiet hour',
     'Trust the next tick',
+    'Do the next true thing',
+    'Attention is a gift',
+    'Begin again, softly',
+    'Here is enough',
+    'Let the rest fade',
+    'Steady over perfect',
+    'Keep the circle small',
+    'One page, one pulse',
+    'The room is yours now',
+    'Silence helps you hear',
+    'Ease into the hard part',
+    'Nothing urgent but this',
+    'Stay with what’s in front',
+    'Soft shoulders, clear eyes',
+    'Time is already enough',
+    'Don’t chase — arrive',
+    'Simple focus, honest work',
+    'You can hold this minute',
+    'Come back to the center',
+    'The quiet is on your side',
+    'You showed up — that matters',
+    'Be proud of this pause',
+    'A soft close is still a close',
+    'Your care left a mark',
+    'Rest inside what you gave',
+    'Nothing more is owed right now',
+    'Kind effort counts twice',
+    'You held the thread',
+    'Let this settle in your bones',
+    'Warmth over hurry',
   ];
 
   /// Picks a quote for a new session, avoiding an immediate repeat.
