@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:live_activities/models/alert_config.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:pulse/features/focus/data/focus_background_alerts.dart';
 import 'package:pulse/features/focus/data/focus_live_activity_service.dart';
 import 'package:pulse/features/focus/data/focus_timer_sounds.dart';
 import 'package:pulse/features/focus/domain/entities/focus_session.dart';
@@ -40,14 +41,6 @@ class FocusDurationChanged extends FocusEvent {
   final int minutes;
   @override
   List<Object?> get props => [minutes];
-}
-
-/// TEMP: short-second lengths for local sound/Live Activity testing — do not ship.
-class FocusTestDurationSecondsChanged extends FocusEvent {
-  const FocusTestDurationSecondsChanged(this.seconds);
-  final int seconds;
-  @override
-  List<Object?> get props => [seconds];
 }
 
 class FocusTimerStarted extends FocusEvent {
@@ -161,7 +154,6 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     on<FocusStarted>(_onStarted);
     on<FocusModeChanged>(_onMode);
     on<FocusDurationChanged>(_onDuration);
-    on<FocusTestDurationSecondsChanged>(_onTestDurationSeconds);
     on<FocusTimerStarted>(_onStartTimer);
     on<FocusTimerPaused>(_onPause);
     on<FocusTimerResumed>(_onResume);
@@ -288,25 +280,6 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     );
   }
 
-  /// TEMP: does not persist to settings.
-  Future<void> _onTestDurationSeconds(
-    FocusTestDurationSecondsChanged event,
-    Emitter<FocusState> emit,
-  ) async {
-    if (state.isRunning || state.sessionStartedAt != null) return;
-    final seconds = event.seconds.clamp(1, 120);
-    emit(
-      state.copyWith(
-        mode: FocusMode.pomodoro,
-        totalSeconds: seconds,
-        remainingSeconds: seconds,
-        elapsedSeconds: 0,
-        isCompleted: false,
-        clearSession: true,
-      ),
-    );
-  }
-
   Future<void> _onStartTimer(
     FocusTimerStarted event,
     Emitter<FocusState> emit,
@@ -338,6 +311,16 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       totalSeconds: state.totalSeconds,
       endsAt: endsAt,
     );
+    // OS alerts (iOS local notif / Android AlarmManager) — survive background.
+    await FocusBackgroundAlerts.schedule(
+      remainingSeconds: remaining,
+      endsAt: endsAt,
+      quote: quote,
+      paused: false,
+      warningEnabled: _settings.warningSoundEnabled,
+      ticksEnabled: _settings.focusTickSoundEnabled,
+      completionEnabled: _settings.completionSoundEnabled,
+    );
     _startTicker();
   }
 
@@ -349,6 +332,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     final remaining = _remainingFromDeadline().clamp(0, state.totalSeconds);
     _segmentEndsAt = null;
     emit(state.copyWith(isRunning: false, remainingSeconds: remaining));
+    await FocusBackgroundAlerts.cancel();
     await _liveActivity.update(
       quote: state.sessionQuote ?? 'Stay with it',
       remainingSeconds: remaining,
@@ -373,6 +357,15 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       isPaused: false,
       endsAt: endsAt,
     );
+    await FocusBackgroundAlerts.schedule(
+      remainingSeconds: remaining,
+      endsAt: endsAt,
+      quote: state.sessionQuote ?? 'Stay with it',
+      paused: false,
+      warningEnabled: _settings.warningSoundEnabled,
+      ticksEnabled: _settings.focusTickSoundEnabled,
+      completionEnabled: _settings.completionSoundEnabled,
+    );
     _startTicker();
   }
 
@@ -384,6 +377,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _segmentEndsAt = null;
     _didWarnTenSeconds = false;
     _lastAnnouncedSecond = -1;
+    await FocusBackgroundAlerts.cancel();
     await _liveActivity.end();
     emit(
       state.copyWith(
@@ -437,7 +431,11 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
         await HapticFeedback.mediumImpact();
       }
     } else if (remaining < 10) {
-      if (_settings.focusTickSoundEnabled) {
+      // On iOS/Android, tick audio is OS-scheduled (AlarmManager / local
+      // notifications) so it still plays when Flutter is suspended. Playing
+      // AssetSource here would double-fire while the app is still alive.
+      final osOwnsTicks = !kIsWeb && (Platform.isIOS || Platform.isAndroid);
+      if (_settings.focusTickSoundEnabled && !osOwnsTicks) {
         await FocusTimerSounds.warningTick();
       }
       if (_settings.hapticsEnabled) {
@@ -467,6 +465,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     _timer?.cancel();
     _segmentEndsAt = null;
     _lastAnnouncedSecond = -1;
+    await FocusBackgroundAlerts.cancel();
     if (_settings.completionSoundEnabled) {
       await FocusTimerSounds.completed();
     }

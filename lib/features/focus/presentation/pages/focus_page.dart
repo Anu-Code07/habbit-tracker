@@ -130,15 +130,6 @@ class _FocusSetupView extends StatelessWidget {
                           'Tap to choose · deep work block',
                           style: PulseTypography.bodySm(),
                         ),
-                        // TEMP: remove before shipping — quick QA for sounds / LA.
-                        const SizedBox(height: PulseSpacing.md),
-                        _ModeChip(
-                          label: '20s test (temp)',
-                          selected: state.totalSeconds == 20,
-                          onTap: () => context.read<FocusBloc>().add(
-                                const FocusTestDurationSecondsChanged(20),
-                              ),
-                        ),
                       ] else ...[
                         Text(
                           _formatLength(state.totalSeconds),

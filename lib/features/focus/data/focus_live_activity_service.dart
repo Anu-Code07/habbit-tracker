@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:live_activities/live_activities.dart';
 import 'package:live_activities/models/alert_config.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:pulse/features/focus/data/focus_background_alerts.dart';
 
 enum FocusLiveAction { pause, resume, finish }
 
@@ -17,6 +18,7 @@ class FocusLiveActivityService {
   final LiveActivities _plugin = LiveActivities();
   final _actionsController = StreamController<FocusLiveAction>.broadcast();
   StreamSubscription<dynamic>? _urlSub;
+  StreamSubscription<String>? _androidActionSub;
 
   bool _initialized = false;
   bool _active = false;
@@ -37,6 +39,7 @@ class FocusLiveActivityService {
         urlScheme: 'pulse',
       );
       _listenUrlActions();
+      await _listenAndroidActions();
       _initialized = true;
     } catch (error, stack) {
       debugPrint('FocusLiveActivity init failed: $error\n$stack');
@@ -76,11 +79,49 @@ class FocusLiveActivityService {
     });
   }
 
+  Future<void> _listenAndroidActions() async {
+    if (_androidActionSub != null) return;
+    if (!Platform.isAndroid) return;
+    await FocusBackgroundAlerts.listenAndroidActions();
+    _androidActionSub = FocusBackgroundAlerts.androidActions.listen((token) {
+      final action = switch (token) {
+        'pause' => FocusLiveAction.pause,
+        'resume' => FocusLiveAction.resume,
+        'finish' || 'stop' => FocusLiveAction.finish,
+        _ => null,
+      };
+      if (action != null) {
+        debugPrint('FocusLiveActivity Android notification action: $action');
+        _actionsController.add(action);
+      }
+    });
+  }
+
   Future<void> _ensureNotificationPermission() async {
     final status = await Permission.notification.status;
     if (!status.isGranted) {
       await Permission.notification.request();
     }
+    if (Platform.isAndroid) {
+      final alarm = await Permission.scheduleExactAlarm.status;
+      if (!alarm.isGranted) {
+        await Permission.scheduleExactAlarm.request();
+      }
+    }
+  }
+
+  Future<void> _syncBackgroundAlerts({
+    required String quote,
+    required int remainingSeconds,
+    required bool isPaused,
+    DateTime? endsAt,
+  }) {
+    return FocusBackgroundAlerts.schedule(
+      remainingSeconds: remainingSeconds,
+      endsAt: endsAt,
+      quote: quote,
+      paused: isPaused,
+    );
   }
 
   Map<String, dynamic> _payload({
@@ -211,6 +252,13 @@ class FocusLiveActivityService {
         'FocusLiveActivity started on Dynamic Island id=$_systemActivityId',
       );
 
+      await _syncBackgroundAlerts(
+        quote: quote,
+        remainingSeconds: remainingSeconds,
+        isPaused: false,
+        endsAt: endsAt,
+      );
+
       // Brief island presentation so the timer is obvious at session start.
       final systemId = _systemActivityId;
       if (systemId != null) {
@@ -291,15 +339,25 @@ class FocusLiveActivityService {
           await _plugin.updateActivity(resolved, data, alert);
         }
       }
+      await _syncBackgroundAlerts(
+        quote: quote,
+        remainingSeconds: remainingSeconds,
+        isPaused: isPaused,
+        endsAt: endsAt,
+      );
     } catch (error) {
       debugPrint('FocusLiveActivity update failed: $error');
     }
   }
 
   Future<void> end({AlertConfig? completionAlert, String? quote}) async {
-    if (!_active && _systemActivityId == null) return;
+    if (!_active && _systemActivityId == null) {
+      await FocusBackgroundAlerts.cancel();
+      return;
+    }
 
     try {
+      await FocusBackgroundAlerts.cancel();
       if (completionAlert != null) {
         await _resolveSystemActivityId();
         final systemId = _systemActivityId;
@@ -336,6 +394,9 @@ class FocusLiveActivityService {
   Future<void> dispose() async {
     await _urlSub?.cancel();
     _urlSub = null;
+    await _androidActionSub?.cancel();
+    _androidActionSub = null;
+    await FocusBackgroundAlerts.cancel();
     await _actionsController.close();
   }
 }
