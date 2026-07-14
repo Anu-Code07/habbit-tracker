@@ -29,6 +29,31 @@ import 'package:pulse/features/splash/presentation/pages/splash_page.dart';
 GoRouter createRouter() {
   return GoRouter(
     initialLocation: '/splash',
+    redirect: (context, state) {
+      final uri = state.uri;
+      final raw = uri.toString().toLowerCase();
+
+      // Live Activity / notification actions — not pages. Handled by
+      // FocusLiveActivityService; land on Focus so the session can finish.
+      if (uri.scheme == 'pulse' ||
+          raw.startsWith('pulse:') ||
+          raw.contains('://focus/')) {
+        return '/app/focus';
+      }
+
+      return null;
+    },
+    onException: (_, state, router) {
+      final raw = state.uri.toString().toLowerCase();
+      if (state.uri.scheme == 'pulse' ||
+          raw.startsWith('pulse:') ||
+          raw.contains('://focus/')) {
+        router.go('/app/focus');
+        return;
+      }
+      // Error-screen "Home" and any other unknown location.
+      router.go('/app/today');
+    },
     routes: [
       GoRoute(
         path: '/splash',
@@ -37,6 +62,11 @@ GoRouter createRouter() {
       GoRoute(
         path: '/onboarding',
         builder: (_, __) => const OnboardingPage(),
+      ),
+      // Absolute fallback so a bare "/" never shows Page Not Found.
+      GoRoute(
+        path: '/',
+        redirect: (_, __) => '/splash',
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

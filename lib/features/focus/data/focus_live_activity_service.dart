@@ -26,7 +26,25 @@ class FocusLiveActivityService {
   /// ActivityKit system id — required by [LiveActivities.updateActivity].
   String? _systemActivityId;
 
-  Stream<FocusLiveAction> get actions => _actionsController.stream;
+  /// Buffered until FocusBloc (or another listener) subscribes.
+  FocusLiveAction? _pendingAction;
+
+  Stream<FocusLiveAction> get actions async* {
+    final pending = _pendingAction;
+    if (pending != null) {
+      _pendingAction = null;
+      yield pending;
+    }
+    yield* _actionsController.stream;
+  }
+
+  void _emitAction(FocusLiveAction action) {
+    if (_actionsController.hasListener) {
+      _actionsController.add(action);
+    } else {
+      _pendingAction = action;
+    }
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -72,7 +90,7 @@ class FocusLiveActivityService {
 
       if (action != null) {
         debugPrint('FocusLiveActivity action from Live Activity: $action');
-        _actionsController.add(action);
+        _emitAction(action);
       }
     }, onError: (Object error) {
       debugPrint('FocusLiveActivity url scheme error: $error');
@@ -92,7 +110,7 @@ class FocusLiveActivityService {
       };
       if (action != null) {
         debugPrint('FocusLiveActivity Android notification action: $action');
-        _actionsController.add(action);
+        _emitAction(action);
       }
     });
   }
