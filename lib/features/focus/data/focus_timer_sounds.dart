@@ -1,84 +1,116 @@
+import 'dart:async';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
-/// Pleasant Kenney UI chimes for focus countdown / completion.
+/// Focus countdown / completion chimes.
+///
+/// Uses [AssetSource] (proven on desktop) plus a fresh player per cue so a
+/// stuck Android MediaPlayer can't silence the next chime.
 abstract final class FocusTimerSounds {
-  static final AudioPlayer _player = AudioPlayer();
-  static bool _configured = false;
+  static bool _warmed = false;
 
-  /// Prefer notification/sonification routing — `alarm` is silent on many OEMs
-  /// unless the app is treated as an alarm clock.
-  static AudioContext get _chimeContext => AudioContext(
+  static AudioContext get _context => AudioContext(
         iOS: AudioContextIOS(
-          // playback ignores the Ring/Silent switch; duckOthers keeps it audible
-          // without killing background music permanently.
           category: AVAudioSessionCategory.playback,
-          options: const {
-            AVAudioSessionOptions.defaultToSpeaker,
-            AVAudioSessionOptions.duckOthers,
-            AVAudioSessionOptions.mixWithOthers,
-          },
+          options: const {AVAudioSessionOptions.duckOthers},
         ),
         android: const AudioContextAndroid(
-          isSpeakerphoneOn: true,
-          stayAwake: false,
-          contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.notification,
+          // Keep false — speakerphone routing fights media on Nothing OS.
+          isSpeakerphoneOn: false,
+          stayAwake: true,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media,
           audioFocus: AndroidAudioFocus.gainTransientMayDuck,
         ),
       );
 
   static Future<void> warmUp() async {
-    await _ensureConfigured();
-  }
-
-  static Future<void> _ensureConfigured() async {
-    if (_configured) return;
+    if (_warmed) return;
     try {
-      await AudioPlayer.global.setAudioContext(_chimeContext);
-      await _player.setAudioContext(_chimeContext);
-      // mediaPlayer is reliable for short WAV assets; lowLatency skips some.
-      await _player.setPlayerMode(PlayerMode.mediaPlayer);
-      await _player.setReleaseMode(ReleaseMode.stop);
-      await _player.setVolume(1);
-      _configured = true;
+      await AudioPlayer.global.setAudioContext(_context);
+      final probe = AudioPlayer();
+      await probe.setAudioContext(_context);
+      await probe.setSource(AssetSource('sounds/focus_complete.wav'));
+      await probe.dispose();
+      _warmed = true;
     } catch (error, stack) {
-      debugPrint('FocusTimerSounds configure failed: $error\n$stack');
+      debugPrint('FocusTimerSounds warmUp failed: $error\n$stack');
     }
   }
 
   static Future<void> _play(
     String assetPath, {
+    double volume = 1.0,
     bool waitUntilDone = false,
   }) async {
+    final player = AudioPlayer();
     try {
-      await _ensureConfigured();
-      // Re-assert context in case another plugin changed the session.
-      await _player.setAudioContext(_chimeContext);
-      await _player.stop();
-      await _player.setVolume(1.0);
-      // AssetSource paths are relative to the Flutter assets/ root.
-      await _player.play(
+      await AudioPlayer.global.setAudioContext(_context);
+      await player.setAudioContext(_context);
+      await player.setPlayerMode(PlayerMode.mediaPlayer);
+      await player.setReleaseMode(ReleaseMode.release);
+      final v = volume.clamp(0.0, 1.0);
+      debugPrint('FocusTimerSounds play AssetSource($assetPath) vol=$v');
+      await player.play(
         AssetSource(assetPath),
-        ctx: _chimeContext,
-        volume: 1.0,
+        ctx: _context,
+        volume: v,
+        mode: PlayerMode.mediaPlayer,
       );
+      debugPrint('FocusTimerSounds state=${player.state}');
       if (waitUntilDone) {
-        await _player.onPlayerComplete.first.timeout(
-          const Duration(seconds: 3),
-          onTimeout: () {},
+        try {
+          await player.onPlayerComplete.first.timeout(
+            const Duration(seconds: 4),
+          );
+        } on TimeoutException {
+          // best-effort
+        }
+      } else {
+        // Let short ticks finish without holding the player.
+        unawaited(
+          player.onPlayerComplete.first
+              .timeout(const Duration(seconds: 2))
+              .then((_) => player.dispose())
+              .catchError((_) => player.dispose()),
         );
+        return;
       }
     } catch (error, stack) {
       debugPrint('FocusTimerSounds failed ($assetPath): $error\n$stack');
+      try {
+        await SystemSound.play(SystemSoundType.alert);
+      } catch (_) {}
+    } finally {
+      if (waitUntilDone) {
+        try {
+          await player.dispose();
+        } catch (_) {}
+      }
     }
   }
 
-  static Future<void> warningTick() => _play('sounds/focus_tick.wav');
+  static Future<void> warningTick() => _play(
+        'sounds/focus_tick.wav',
+        volume: 1.0,
+      );
 
-  static Future<void> warningAlert() =>
-      _play('sounds/focus_warning.wav', waitUntilDone: true);
+  static Future<void> warningAlert() => _play(
+        'sounds/focus_warning.wav',
+        volume: 1.0,
+        waitUntilDone: true,
+      );
 
-  static Future<void> completed() =>
-      _play('sounds/focus_complete.wav', waitUntilDone: true);
+  static Future<void> completed() async {
+    await _play(
+      'sounds/focus_complete.wav',
+      volume: 1.0,
+      waitUntilDone: true,
+    );
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+  }
 }

@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0e0f0c</color>
+    <color name="ic_launcher_background">#0E0F0C</color>
+
+    <!-- Focus live notification — light shade -->
+    <color name="pulse_live_title">#0E0F0C</color>
+    <color name="pulse_live_subtitle">#5C605A</color>
+    <color name="pulse_live_status">#1B8F3A</color>
+    <color name="pulse_live_timer">#0E0F0C</color>
 </resources>

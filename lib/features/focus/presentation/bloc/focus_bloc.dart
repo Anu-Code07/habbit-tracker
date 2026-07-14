@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:live_activities/models/alert_config.dart';
@@ -38,6 +40,14 @@ class FocusDurationChanged extends FocusEvent {
   final int minutes;
   @override
   List<Object?> get props => [minutes];
+}
+
+/// TEMP: short-second lengths for local sound/Live Activity testing — do not ship.
+class FocusTestDurationSecondsChanged extends FocusEvent {
+  const FocusTestDurationSecondsChanged(this.seconds);
+  final int seconds;
+  @override
+  List<Object?> get props => [seconds];
 }
 
 class FocusTimerStarted extends FocusEvent {
@@ -151,6 +161,7 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     on<FocusStarted>(_onStarted);
     on<FocusModeChanged>(_onMode);
     on<FocusDurationChanged>(_onDuration);
+    on<FocusTestDurationSecondsChanged>(_onTestDurationSeconds);
     on<FocusTimerStarted>(_onStartTimer);
     on<FocusTimerPaused>(_onPause);
     on<FocusTimerResumed>(_onResume);
@@ -268,6 +279,25 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
     final seconds = minutes * 60;
     emit(
       state.copyWith(
+        totalSeconds: seconds,
+        remainingSeconds: seconds,
+        elapsedSeconds: 0,
+        isCompleted: false,
+        clearSession: true,
+      ),
+    );
+  }
+
+  /// TEMP: does not persist to settings.
+  Future<void> _onTestDurationSeconds(
+    FocusTestDurationSecondsChanged event,
+    Emitter<FocusState> emit,
+  ) async {
+    if (state.isRunning || state.sessionStartedAt != null) return;
+    final seconds = event.seconds.clamp(1, 120);
+    emit(
+      state.copyWith(
+        mode: FocusMode.pomodoro,
         totalSeconds: seconds,
         remainingSeconds: seconds,
         elapsedSeconds: 0,
@@ -415,16 +445,17 @@ class FocusBloc extends Bloc<FocusEvent, FocusState> {
       }
     }
 
-    // Only refresh Live Activity when entering the warning window.
-    // Rewriting endAtMs every tick was the main source of desync.
-    if (shouldPushLiveActivity) {
+    // iOS counts down via Dynamic Island timerInterval (stable endAt).
+    // Android notification text is static unless we refresh each second.
+    final pushAndroidTick = !kIsWeb && Platform.isAndroid;
+    if (shouldPushLiveActivity || pushAndroidTick) {
       await _liveActivity.update(
         quote: state.sessionQuote ?? 'Stay with it',
         remainingSeconds: remaining,
         totalSeconds: state.totalSeconds,
         isPaused: false,
         endsAt: _segmentEndsAt,
-        alert: islandAlert,
+        alert: shouldPushLiveActivity ? islandAlert : null,
       );
     }
   }

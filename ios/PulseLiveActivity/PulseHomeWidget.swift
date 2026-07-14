@@ -49,13 +49,22 @@ struct PulseHomeProvider: TimelineProvider {
 
 struct PulseHomeWidgetView: View {
   var entry: PulseHomeEntry
-
-  private let canvas = Color(red: 0.89, green: 0.96, blue: 0.84)
-  private let ink = Color(red: 0.05, green: 0.06, blue: 0.05)
-  private let inkDeep = Color(red: 0.09, green: 0.20, blue: 0.0)
-  private let mute = Color(red: 0.53, green: 0.53, blue: 0.52)
+  @Environment(\.colorScheme) private var colorScheme
 
   var body: some View {
+    let canvas = colorScheme == .dark
+      ? Color(red: 0.10, green: 0.14, blue: 0.10)
+      : Color(red: 0.89, green: 0.96, blue: 0.84)
+    let ink = colorScheme == .dark
+      ? Color(red: 0.95, green: 0.96, blue: 0.94)
+      : Color(red: 0.05, green: 0.06, blue: 0.05)
+    let inkDeep = colorScheme == .dark
+      ? Color(red: 0.72, green: 0.90, blue: 0.55)
+      : Color(red: 0.09, green: 0.20, blue: 0.0)
+    let mute = colorScheme == .dark
+      ? Color(red: 0.65, green: 0.68, blue: 0.64)
+      : Color(red: 0.53, green: 0.53, blue: 0.52)
+
     VStack(alignment: .leading, spacing: 10) {
       Text("PULSE")
         .font(.system(size: 11, weight: .heavy, design: .rounded))
@@ -70,8 +79,8 @@ struct PulseHomeWidgetView: View {
       Spacer(minLength: 0)
 
       HStack(alignment: .bottom, spacing: 16) {
-        metric(title: "Habits", value: entry.habitsLabel)
-        metric(title: "Focus", value: "\(entry.focusMinutes) min")
+        metric(title: "Habits", value: entry.habitsLabel, mute: mute, ink: ink)
+        metric(title: "Focus", value: "\(entry.focusMinutes) min", mute: mute, ink: ink)
       }
     }
     .padding(16)
@@ -79,7 +88,7 @@ struct PulseHomeWidgetView: View {
     .modifier(PulseWidgetBackground(color: canvas))
   }
 
-  private func metric(title: String, value: String) -> some View {
+  private func metric(title: String, value: String, mute: Color, ink: Color) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(title)
         .font(.system(size: 11, weight: .medium))

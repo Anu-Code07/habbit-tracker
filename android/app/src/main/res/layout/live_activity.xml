@@ -17,7 +17,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Pulse Focus"
-            android:textColor="#0E0F0C"
+            android:textColor="@color/pulse_live_title"
             android:textSize="16sp"
             android:textStyle="bold" />
 
@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:text="Pomodoro"
-            android:textColor="#454745"
+            android:textColor="@color/pulse_live_subtitle"
             android:textSize="13sp" />
 
         <TextView
@@ -36,16 +36,18 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:text="Focusing"
-            android:textColor="#2EAD4B"
+            android:textColor="@color/pulse_live_status"
             android:textSize="12sp" />
     </LinearLayout>
 
-    <TextView
+    <!-- Counts down in the shade without Flutter pushing every second. -->
+    <Chronometer
         android:id="@+id/live_remaining"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="25:00"
-        android:textColor="#0E0F0C"
+        android:textColor="@color/pulse_live_timer"
         android:textSize="28sp"
-        android:textStyle="bold" />
+        android:textStyle="bold"
+        android:format="%s" />
 </LinearLayout>

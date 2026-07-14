@@ -6,8 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.RemoteViews
 import com.example.live_activities.LiveActivityManager
@@ -82,19 +85,61 @@ class CustomLiveActivityManager(context: Context) : LiveActivityManager(context)
         }
     }
 
+    private fun isSystemDark(): Boolean {
+        val mode = appContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        return mode == Configuration.UI_MODE_NIGHT_YES
+    }
+
     private fun updateRemoteViews(data: Map<String, Any>) {
         val title = data["title"] as? String ?: "Pulse Focus"
         val subtitle = data["subtitle"] as? String ?: ""
-        val remaining = data["remainingLabel"] as? String ?: "--:--"
+        val remainingLabel = data["remainingLabel"] as? String ?: "--:--"
         val status = data["status"] as? String ?: "running"
+        val remainingSeconds = when (val value = data["remainingSeconds"]) {
+            is Number -> value.toLong().coerceAtLeast(0L)
+            is String -> value.toLongOrNull()?.coerceAtLeast(0L) ?: 0L
+            else -> 0L
+        }
+        val paused = status == "paused"
+        val dark = isSystemDark()
+
+        // Flutter keeps the Activity in light theme; notification shade follows
+        // system dark mode — set colors explicitly so dark shade stays readable.
+        val titleColor = if (dark) Color.parseColor("#F2F4F0") else Color.parseColor("#0E0F0C")
+        val subtitleColor = if (dark) Color.parseColor("#B4B8B0") else Color.parseColor("#5C605A")
+        val timerColor = titleColor
+        val statusColor = if (dark) Color.parseColor("#7ED957") else Color.parseColor("#1B8F3A")
 
         remoteViews.setTextViewText(R.id.live_title, title)
         remoteViews.setTextViewText(R.id.live_subtitle, subtitle)
-        remoteViews.setTextViewText(R.id.live_remaining, remaining)
         remoteViews.setTextViewText(
             R.id.live_status,
-            if (status == "paused") "Paused" else "Focusing",
+            if (paused) "Paused" else "Focusing",
         )
+        remoteViews.setTextColor(R.id.live_title, titleColor)
+        remoteViews.setTextColor(R.id.live_subtitle, subtitleColor)
+        remoteViews.setTextColor(R.id.live_status, statusColor)
+        remoteViews.setTextColor(R.id.live_remaining, timerColor)
+
+        // iOS Live Activities count down via timerInterval; Android notifications
+        // are static unless we drive Chronometer from remainingSeconds.
+        if (paused || remainingSeconds <= 0L) {
+            remoteViews.setChronometer(
+                R.id.live_remaining,
+                SystemClock.elapsedRealtime(),
+                null,
+                false,
+            )
+            remoteViews.setTextViewText(R.id.live_remaining, remainingLabel)
+            remoteViews.setTextColor(R.id.live_remaining, timerColor)
+        } else {
+            val base = SystemClock.elapsedRealtime() + remainingSeconds * 1000L
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                remoteViews.setChronometerCountDown(R.id.live_remaining, true)
+            }
+            remoteViews.setChronometer(R.id.live_remaining, base, null, true)
+            remoteViews.setTextColor(R.id.live_remaining, timerColor)
+        }
     }
 
     private fun wantsAlertSound(data: Map<String, Any>): Boolean {

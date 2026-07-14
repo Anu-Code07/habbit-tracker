@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Focus live notification — dark shade -->
+    <color name="pulse_live_title">#F2F4F0</color>
+    <color name="pulse_live_subtitle">#B4B8B0</color>
+    <color name="pulse_live_status">#7ED957</color>
+    <color name="pulse_live_timer">#F2F4F0</color>
+</resources>
